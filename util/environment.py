@@ -37,13 +37,17 @@ class Environment:
 			print "Simulation Over"
 			return OrderBook([],[],[],[])
 		else:
-			ret = self.time_steps[self.current_timestep]
+			if self.current_timestep == 0:
+				self.curr_book = self.time_steps[0]
+			else:
+				self.curr_book.apply_diff(self.time_steps[self.current_timestep])
 			self.current_timestep += 1
-			return ret
+			return self.curr_book 
+
 
 	# returns total price paid or received and volume left
 	def limit_order(self, side, price, volume):
-		curr_book = self.time_steps[self.current_timestep]
+		curr_book = self.curr_book
 		# 0 is buy, 1 is sell
 		total = 0
 		if side == 0:
@@ -110,11 +114,23 @@ class OrderBook:
 	Takes difference orderbook and applies it to this one.
 	Allows agent's orders to be processed without losing the actual
 	changes in the market between the order books -- UNDER CONSTRUCTION
+	Idea is: if we already ordered everything at some current existing price, it
+	is no longer available to order in our books! All we do when we move timesteps
+	is observe any new potential prices levels or changes in levels and add them to our book. 
+	If an old price level is no longer offered by the market at next step, we clean it out too.
 	'''
 	def apply_diff(self, ob_next):
 		a = {}
+		b = {}
 		for price, volume in ob_next.a:
-			a[price] = 
+			v = price in self.a ? self.a[price] + ob_next.a[price] : ob_next.a[price]
+			a[price] = v
+		for price, volume in ob_next.b:
+			v = price in self.b ? self.b[price] + ob_next.b[price] : ob_next.b[price]
+			b[price] = v
+		self.a = a
+		self.b = b
+
 
 	def clean_book(self):
 		# clean up gone price levels
@@ -133,18 +149,26 @@ class OrderBook:
 			if price in self.a: 
 				ret = max(0, volume - self.a[price])
 				self.a[price] = max(self.a[price] - volume, 0)
-				self.clean_book()
 				return ret
 			return -1
 		elif side == 1:
 			if price in self.b: 
 				ret = max(0, volume - self.b[price])
 				self.b[price] = max(self.b[price] - volume, 0)
-				self.clean_book()
 				return ret
 			return -1
 		else:
 			print "Invalid side code - OrderBook.order"
 			return -2
 
+	def vectorize_book(self, price_levels):
+		ret = np.zeros(price_levels, 4)
+		ret[:,:] = -1
+		row = 0
+		for price, volume in self.a:
+			ret[row, 0] = price
+			ret[row, 1] = volume
+		for price, volume in self.b:
+			ret[row, 2] = price
+			ret[row, 3] = volume
 

@@ -1,11 +1,3 @@
+from environment import *
 
-class Agent:
-	def __init__(self):
-		pass
-	def do_time_step(self):
-		pass
-
-
-
-
-def Algo:
+def dp_algo(ob_file, time_quantam, vol_quantam):
