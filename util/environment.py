@@ -2,14 +2,18 @@ import numpy as np
 import csv
 
 
+
+def num(l):
+	return [int(x) for x in l]
+
 class Environment:
 
-	def __init__(self, orderbook_file, setup=True):
+	def __init__(self, orderbook_file, setup=True):
 		file_stream = open(orderbook_file, 'r')
-		books = csv.reader(file, ',')
+		books = csv.reader(file_stream, delimiter=',')
 		self.books = [book for book in books]
 		if setup:
-			self.get_timesteps(0, len(books))
+			self.get_timesteps(0, len(self.books))
 
 	# generates the correct environment from timesteps start to end-1
 	def get_timesteps(self, start, end):
@@ -20,19 +24,23 @@ class Environment:
 		self.time_steps = []
 		for i in range(start, end):
 			book = self.books[i]
-			ask_prices = book[0::4]
-			ask_volumes = book[1::4]
-			bid_prices = book[2::4]
-			bid_volumes = book[3::4]
+			ask_prices = num(book[0::4])
+			ask_volumes = num(book[1::4])
+			bid_prices = num(book[2::4])
+			bid_volumes = num(book[3::4])	
 			if len(self.time_steps) > 0:
-				ob = self.time_steps[-1].diff(ask_prices, ask_volumes, bid_prices, bid_volumes)
+				ob = curr_book.diff(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				self.time_steps.append(ob)
+				curr_book.apply_diff(self.time_steps[-1])
 			else:
 				ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
+				curr_book = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				self.time_steps.append(ob)
+	
+
 
 	# returns orderbook of next state: after the first orderbook this only provides diffs
-	def get_next_state(self);
+	def get_next_state(self):
 		if self.current_timestep >= len(self.time_steps):
 			print "Simulation Over"
 			return OrderBook([],[],[],[])
@@ -78,10 +86,10 @@ class OrderBook:
 	def __init__(self, asks, ask_vols, bids, bid_vols):
 		self.a = {}
 		for i in range(len(asks)):
-			a[asks[i]] = ask_vols[i]
+			self.a[asks[i]] = ask_vols[i]
 		self.b = {}
-		for i in range(len(asks)) :
-			a[bids[i]] = bid_vols[i]
+		for i in range(len(asks)):
+			self.b[bids[i]] = bid_vols[i]
 
 	'''
 	Assumes this is orderbook at step t, takes info for step t+1,
@@ -108,8 +116,8 @@ class OrderBook:
 			else:
 				new_b.append(bids[i])
 				new_bv.append(bid_vols[i])
-		return OrderBook(new_a, new _av, new_b, new_bv)
-
+		return OrderBook(new_a, new_av, new_b, new_bv)
+		 
 	'''
 	Takes difference orderbook and applies it to this one.
 	Allows agent's orders to be processed without losing the actual
@@ -122,11 +130,11 @@ class OrderBook:
 	def apply_diff(self, ob_next):
 		a = {}
 		b = {}
-		for price, volume in ob_next.a:
-			v = price in self.a ? self.a[price] + ob_next.a[price] : ob_next.a[price]
+		for price, volume in ob_next.a.items():
+			v = self.a[price] + ob_next.a[price] if price in self.a else ob_next.a[price]
 			a[price] = v
-		for price, volume in ob_next.b:
-			v = price in self.b ? self.b[price] + ob_next.b[price] : ob_next.b[price]
+		for price, volume in ob_next.b.items():
+			v = self.b[price] + ob_next.b[price] if price in self.b else ob_next.b[price]
 			b[price] = v
 		self.a = a
 		self.b = b
