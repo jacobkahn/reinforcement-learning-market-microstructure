@@ -15,6 +15,21 @@ class Environment:
 		if setup:
 			self.get_timesteps(0, len(self.books))
 
+	def mid_spread(self, t):
+		book = self.books[t]
+		ask_prices = num(book[0::4])
+		bid_prices = num(book[2::4])
+		return (ask_prices[0] + bid_prices[0])/2
+
+	def get_book(self, t):
+		book = self.books[i]
+		ask_prices = num(book[0::4])
+		ask_volumes = num(book[1::4])
+		bid_prices = num(book[2::4])
+		bid_volumes = num(book[3::4])
+		ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
+		return ob
+
 	# generates the correct environment from timesteps start to end-1
 	def get_timesteps(self, start, end):
 		if start < 0 or end > len(self.books):
@@ -59,27 +74,32 @@ class Environment:
 		# 0 is buy, 1 is sell
 		total = 0
 		if side == 0:
-			for p, v in sorted(curr_book.a.items()):
+			for pr, v in sorted(curr_book.a.items()):
 				if volume == 0:
-					return (total, 0)
+					return (total, volume)
 				else:
-					if p <= price:
+					if pr <= price:
 						# returns number left after you clear orderbook at this price
-						left = curr_book.order(side, p, volume)
+						left = curr_book.order(side, pr, volume)
+						total += (volume-left) * pr
 						volume = left
 					else:
 						return (total, volume)
+			return total, volume
 		if side == 1:
-			for p, v in sorted(curr_book.b.items())[::-1]:
+			for pr, v in sorted(curr_book.b.items())[::-1]:
 				if volume == 0:
-					return (total, 0)
+					return (total, volume)
 				else:
-					if p >= price:
+					if pr >= price:
 						# returns number left after you clear orderbook at this price
-						left = curr_book.order(side, p, volume)
+						left = curr_book.order(side, pr, volume)
+						total += (volume-left) * pr
 						volume = left
 					else:
 						return (total, volume)
+				return total, volume
+
 
 class OrderBook:
 
