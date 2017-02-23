@@ -22,12 +22,13 @@ class Environment:
 		return (ask_prices[0] + bid_prices[0])/2
 
 	def get_book(self, t):
-		book = self.books[i]
+		book = self.books[t]
 		ask_prices = num(book[0::4])
 		ask_volumes = num(book[1::4])
 		bid_prices = num(book[2::4])
 		bid_volumes = num(book[3::4])
 		ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
+		self.curr_book = ob
 		return ob
 
 	# generates the correct environment from timesteps start to end-1

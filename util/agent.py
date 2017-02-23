@@ -16,8 +16,7 @@ def dp_algo(ob_file, H, V, I, T, L):
 	for t in range(0, T+1)[::-1]:
 		# regenerate the order books
 		for ts in range(0, 100): 
-			env.get_timesteps(ts, ts+1)
-			curr_book = env.get_next_state()
+			curr_book = env.get_book(ts)
 			# market_cost = compute_mc(curr_book)
 			# volume_misbalance = compute_vm(curr_book)
 			market_cost = 17
@@ -67,11 +66,36 @@ def dp_algo(ob_file, H, V, I, T, L):
 							table[key][action] = 0
 						table[key][action] = float(n)/(n+1)*table[key][action] + float(1)/(n+1)*(spent + arg_min)
 						table[key][num_key] += 1
-	execute_algo(table, env, T)
+	execute_algo(table, env, T, V, I, 20)
+	import pdb
+	pdb.set_trace()
 
-def execute_algo(pi, env, T):
-	
+def execute_algo(table, env, T, V, I, steps):
+	reward = 0
+	volume = V
+	vol_unit = V/I
+	for ts in range(0, steps+1):
+		if ts % (T+1) == 0:
+			env.get_timesteps(ts, ts+T+1)
+			volume = V
+		rounded_unit = int(volume / vol_unit)
+		t_left = T - ts % (T + 1)
+		key = str(t_left) + ',' + str(rounded_unit) + ',' +'17,17'
+		curr_book = env.get_next_state()
+		print key + ' ' + str(ts)
+		print curr_book.b
+		min_action = -1
+		min_val = -1
+		for action, value in table[key]:
+			if type(k) != str:
+				if min_val < value:
+					
 
 
+
+
+
+					
+			
 if __name__ == "__main__":
 	dp_algo("../LOBSTER_SampleFile_MSFT_2012-06-21_1/MSFT_2012-06-21_34200000_57600000_orderbook_1.csv", 10, 10000, 10, 10, 2)
