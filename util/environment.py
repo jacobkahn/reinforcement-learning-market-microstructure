@@ -153,10 +153,10 @@ class OrderBook:
 		b = {}
 		for price, volume in ob_next.a.items():
 			v = self.a[price] + ob_next.a[price] if price in self.a else ob_next.a[price]
-			a[price] = v
+			a[price] = max(v, 0)
 		for price, volume in ob_next.b.items():
 			v = self.b[price] + ob_next.b[price] if price in self.b else ob_next.b[price]
-			b[price] = v
+			b[price] = max(v, 0)
 		self.a = a
 		self.b = b
 
