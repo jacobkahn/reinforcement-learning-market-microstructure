@@ -1,0 +1,26 @@
+---
+output: pdf_document
+---
+
+```{r, echo=FALSE}
+setwd("C:/Users/Amit/Documents/Github/reinforcement-learning-market-microstructure/LOBSTER_SampleFile_MSFT_2012-06-21_1")
+timeseries = read.csv("MSFT_2012-06-21_34200000_57600000_orderbook_1.csv")
+x = 1:411408
+low_res = 1:44
+asks = timeseries$X309900
+bids = timeseries$X309500
+spread = asks - bids
+low_res_spread = spread[1:44*10000]
+ask_vols = timeseries$X3788
+bid_vols = timeseries$X300
+vol_spread = ask_vols - bid_vols
+plot(x, asks, "l")
+lines(x,bids, col="red")
+plot(low_res, low_res_spread, "l", col="blue")
+
+plot(x, ask_vols, "l")
+lines(x,bid_vols, col="red")
+plot(x, vol_spread, "l", col="blue")
+
+
+```

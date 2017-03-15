@@ -8,10 +8,12 @@ def num(l):
 
 class Environment:
 
-	def __init__(self, orderbook_file, setup=True):
+	def __init__(self, orderbook_file, setup=True, window = 100):
 		file_stream = open(orderbook_file, 'r')
 		books = csv.reader(file_stream, delimiter=',')
 		self.books = [book for book in books]
+		self.lookback = []
+		self.window	= window
 		if setup:
 			self.get_timesteps(0, len(self.books))
 
@@ -36,8 +38,19 @@ class Environment:
 		if start < 0 or end > len(self.books):
 			print "Timesteps out of bounds!"
 			return
+
+		self.max_spread = -1
+		self.min_spread = 99999999999999
+
+		self.max_misbalance = -1
+		self.min_misbalance = 9999999999999
+
+		self.max_volume = -1
+		self.min_volume = 9999999999999
+
 		self.current_timestep = 0
 		self.time_steps = []
+
 		for i in range(start, end):
 			book = self.books[i]
 			ask_prices = num(book[0::4])
@@ -52,8 +65,36 @@ class Environment:
 				ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				curr_book = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				self.time_steps.append(ob)
-	
 
+			# update stuff - still have to add volumes
+			s = self.spread(ask_prices, bid_prices)
+			v = self.volume(ob)
+			m = self.misbalance(curr_book)
+
+			self.max_spread = self.max_spread if self.max_spread > s else s
+			self.min_spread = self.min_spread if self.min_spread < s else s
+			self.max_misbalance = self.max_misbalance if self.max_misbalance > m else m
+			self.min_misbalance = self.min_misbalance if self.min_misbalance < m else m
+
+
+	def spread(self, ask_prices, bid_prices):
+		return ask_prices[0] - bid_prices[0]
+
+	def volume(self, curr_book):
+		total = 0
+		a_volumes = curr_book.a.values()
+		b_volumes = curr_book.b.values()
+		for i in range(len(a_volumes)):
+			total += a_volumes[i] + b_volumes[i]
+		return total
+
+	def misbalance(self, curr_book):
+		total = 0
+		a_volumes = curr_book.a.values()
+		b_volumes = curr_book.b.values()
+		for i in range(len(a_volumes)):
+			total += a_volumes[i] - b_volumes[i]
+		return total
 
 	# returns orderbook of next state: after the first orderbook this only provides diffs
 	def get_next_state(self):
@@ -105,6 +146,7 @@ class Environment:
 class OrderBook:
 
 	def __init__(self, asks, ask_vols, bids, bid_vols):
+		#self.market_vol = 
 		self.a = {}
 		for i in range(len(asks)):
 			self.a[asks[i]] = ask_vols[i]
