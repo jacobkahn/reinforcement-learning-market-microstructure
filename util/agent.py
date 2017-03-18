@@ -4,7 +4,7 @@ import csv
 
 
 
-def dp_algo(ob_file, H, V, I, T, L, S=1000, divs=5):
+def dp_algo(ob_file, H, V, I, T, L, S=100, divs=5):
 	table = {}
 	env = Environment(ob_file, setup=False)
 	all_books = len(env.books)
@@ -27,6 +27,8 @@ def dp_algo(ob_file, H, V, I, T, L, S=1000, divs=5):
 
 	spreads.sort()
 	misbalances.sort()
+	import pdb
+	pdb.set_trace( 	)
 
 	for t in range(0, T+1)[::-1]:
 		print t
@@ -37,6 +39,8 @@ def dp_algo(ob_file, H, V, I, T, L, S=1000, divs=5):
 			curr_book = env.get_book(ts)
 			spread = compute_bid_ask_spread(curr_book, spreads)
 			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
+			import pdb
+			pdb.set_trace()
 			actions = sorted(curr_book.a.keys())
 			actions.append(0)
 			for i in range(0, I + 1):
@@ -77,8 +81,8 @@ def dp_algo(ob_file, H, V, I, T, L, S=1000, divs=5):
 							table[key][action] = 0
 						table[key][action] = float(n)/(n+1)*table[key][action] + float(1)/(n+1)*(spent + arg_min)
 						table[key][num_key] += 1
-	rwds, volumes, actions = execute_algo(table, env, H, T, V, I, 1000, spreads, misbalances)
-	# write_model_files(table, rwds, volumes, actions, T)
+	executions = execute_algo(table, env, H, T, V, I, 100000, spreads, misbalances)
+	write_model_files(table, executions, T, L)
 	import pdb
 	pdb.set_trace()
 
@@ -92,6 +96,8 @@ def compute_bid_ask_spread(curr_book, spreads):
 	return len(spreads)
 
 def compute_volume_misbalance(curr_book, misbalances, env):
+	import pdb
+	pdb.set_trace()
 	m = env.misbalance(curr_book)
 	if len(misbalances) == 0 or m < misbalances[0]:
 		return 0
@@ -101,7 +107,7 @@ def compute_volume_misbalance(curr_book, misbalances, env):
 	return len(misbalances)
 
 def execute_algo(table, env, H, T, V, I, steps, spreads, misbalances):
-	rewards = []
+	executions = []
 	volume = V
 	vol_unit = V/I
 	time_unit = H/T
@@ -121,7 +127,6 @@ def execute_algo(table, env, H, T, V, I, steps, spreads, misbalances):
 		volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
 
 		key = str(t_left) + ',' + str(rounded_unit) + ',' + str(spread) + ',' + str(volume_misbalance)
-
 		actions = sorted(curr_book.a.keys())
 		actions.append(0)
 		print key + ' ' + str(ts)
@@ -132,41 +137,44 @@ def execute_algo(table, env, H, T, V, I, steps, spreads, misbalances):
 				if value < min_val:
 					min_val = value
 					min_action = action
-		ds.append(min_action)
-		print min_action
-		print 'initial ' + str(volume)
 		paid, leftover = env.limit_order(0, actions[min_action], volume)
 		if t_left == T:
 			finish, clear = env.limit_order(0, 999999999999, leftover)
 			paid += clear * actions[-2] + paid
 			leftover = 0
 		if min_action == len(actions) - 1 or (paid == 0 and leftover == volume):
-			volumes.append(0)
-			rewards.append('no trade ' + key)
-			print 'leftover ' + str(volume)
+			executions.append([t_left, rounded_unit, spread, volume_misbalance, min_action, 'no trade ', 0])
 			continue
 		if volume != leftover:
 			price_paid = paid / (volume - leftover)
 			basis_p = (float(price_paid) - perfect_price)/perfect_price * 100
-			reward = (basis_p, volume - leftover, key)
-			rewards.append(reward)
-			volumes.append(volume - leftover)
+			reward = [t_left, rounded_unit, spread, volume_misbalance, min_action, basis_p, volume - leftover]
+			executions.append(reward)
 		volume = leftover
-		print 'leftover ' + str(volume)
 		if ts % T != 0:
 			for i in range(0, time_unit - 1):
 				env.get_next_state()	
-	return rewards, volumes, ds
+	return executions
 
 
-def write_model_files(table, rewards, volumes, decisions, T): 
-	table_file = open("table.csv", 'w+')
-	reward_
-	w = csv.writer(out_file)
-	to_write = []
-	for t in range(0, T+1):
-		to_write.append(rewards[t::T+1])
-	w.writerows(to_write)
+def write_model_files(table, executions, T, L): 
+	table_file = open("table.csv", 'wb')
+	trade_file = open("trades.csv", 'wb')
+		# write trades executed
+	w = csv.writer(trade_file)	
+	executions.insert(0, ['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Action', 'Reward', 'Volume'])
+	w.writerows(executions)
+	# write table
+	tw = csv.writer(table_file)
+	table_rows = []
+	table_rows.append(['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Action', 'Expected Payout'])
+	for key in table:
+		for action, payoff in table[key].items():
+			if type(action) != str:
+				t_left, rounded_unit, spread, volume_misbalance = key.split(",")
+				table_rows.append([t_left, rounded_unit, spread, volume_misbalance, action, payoff])
+	tw.writerows(table_rows)
+
 
 
 
@@ -176,4 +184,4 @@ def write_model_files(table, rewards, volumes, decisions, T):
 					
 			
 if __name__ == "__main__":
-	dp_algo("../data/GOOG_2012-06-21_34200000_57600000_orderbook_10.csv", 100, 1000, 4, 4, 11)
+	dp_algo("../data/10_GOOG.csv", 100, 1000, 4, 4, 11)
