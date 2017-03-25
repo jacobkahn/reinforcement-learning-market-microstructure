@@ -1,21 +1,106 @@
 from environment import *
 from collections import defaultdict
 import csv
+import sys
 
 
 
-def dp_algo(ob_file, H, V, I, T, L, S=100, divs=5):
-	table = {}
+
+class Q:
+
+	def __init__(self, T, backup="sampling"):
+		self.backup = backup
+		if self.backup is "sampling":
+			self.Q = {}
+			self.T = T
+
+	def update_table_buy(self, t, i, vol_unit, spread, volume_misbalance, action, actions, env):
+		if self.backup == "sampling": 
+			# create keys to index into table
+			num_key = str(action)+ ',n'
+			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance) 
+			# set values appropriately for new keys
+			if key not in self.Q:
+				self.Q[key] = {}
+			if num_key not in self.Q[key]:
+				self.Q[key][num_key] = 0
+			if action not in self.Q[key]:
+				self.Q[key][action] = 0	
+			n = self.Q[key][num_key]
+			# determine limit price this action specifies and submit it to orderbook
+			limit_price = sys.maxint if t == self.T else actions[action]
+			spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
+			# if at last step and leftovers, assume get the rest of the shares at the worst price in the book
+			if t == self.T:
+				if leftover	>= 0:
+					spent += leftover * actions[-2]
+				arg_min = 0
+			else: 
+				rounded_unit = int(round(1.0 * leftover / vol_unit))
+				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
+				arg_min = sys.maxint
+				next_state = self.Q[next_key]
+				for k,v in next_state.items():
+					if type(k) != str: 
+						arg_min = v if arg_min > v else arg_min
+			# update key
+			self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
+			self.Q[key][num_key] += 1
+
+	def greedy_action(t_left, rounded_unit, spread, volume_misbalance, ts):
+		min_action = -1
+		min_val = sys.maxint
+		key = str(t_left) + ',' + str(rounded_unit) + ',' + str(spread) + ',' + str(volume_misbalance)
+		print key + ' ' + str(ts)
+		for action, value in table[key].items():
+			if type(action) != str:
+				if value < min_val:
+					min_val = value
+					min_action = action
+		return min_action
+
+''' 
+Algorithm from Kearns 2006 Paper
+Uses market variables for bid-ask spread and volume misbalance
+Arguments:
+
+'''
+def dp_algo(ob_file, H, V, I, T, L, S=3000, divs=5):
+	table = Q(T)
 	env = Environment(ob_file, setup=False)
 	all_books = len(env.books)
 	steps = H / T
 	# state variables
+
 	t = T
 	inv = V
 	vol_unit = V/I
 	volume_misbalance = 0
-	# loop for the DP algorithm
+
 	env.get_timesteps(0, S+1)	
+	spreads, misbalances = create_variable_divs(divs, env)
+	
+	# loop for the DP algorithm
+	for t in range(0, T+1)[::-1]:
+		print t
+		for ts in range(0, S): 
+			if ts % 1000 == 0:
+				print ts
+			curr_book = env.get_book(ts)
+			spread = compute_bid_ask_spread(curr_book, spreads)
+			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
+			actions = sorted(curr_book.a.keys())
+			actions.append(0)
+			for i in range(0, I + 1):
+				for action in range(0, L):
+					# regenerate the order book so that we don't have the effects of the last action
+					curr_book = env.get_book(ts)
+					table.update_table_buy(t, i, vol_unit, spread, volume_misbalance, action, actions, env)
+	executions = execute_algo(Q, env, H, V, I, T, 100000, spreads, misbalances)
+	write_model_files(table, executions, T, L)
+
+
+def create_variable_divs(divs, env):
 	spreads = []
 	misbalances = []
 	if divs > 1:
@@ -24,67 +109,9 @@ def dp_algo(ob_file, H, V, I, T, L, S=100, divs=5):
 		for i in range(1, divs):
 			spreads.append(env.min_spread + i * spread_diff)
 			misbalances.append(env.min_misbalance + i * misbalance_diff)
-
 	spreads.sort()
 	misbalances.sort()
-	import pdb
-	pdb.set_trace( 	)
-
-	for t in range(0, T+1)[::-1]:
-		print t
-		# regenerate the order books
-		for ts in range(0, S): 
-			if ts % 1000 == 0:
-				print ts
-			curr_book = env.get_book(ts)
-			spread = compute_bid_ask_spread(curr_book, spreads)
-			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
-			import pdb
-			pdb.set_trace()
-			actions = sorted(curr_book.a.keys())
-			actions.append(0)
-			for i in range(0, I + 1):
-				for action in range(0, L):
-					curr_book = env.get_book(ts)
-					key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance) 
-					if key not in table:
-						table[key] = {}
-					if t is T:
-						if actions[action] == 0:
-							break
-						spent, leftover = env.limit_order(0, 9999999999, V/I * i)
-						if leftover	>= 0:
-							spent+= leftover * actions[-2]
-						num_key = str(action)+ ',n'
-						if num_key not in table[key]:
-							table[key][num_key] = 0
-						n = table[key][num_key]
-						if action not in table[key]:
-							table[key][action] = spent
-						else:
-							table[key][action] = float(n)/(n+1)*table[key][action] + float(1)/(n+1)*(spent)
-						table[key][num_key] += 1
-					else: 
-						spent, leftover = env.limit_order(0, actions[action], V/I * i)
-						rounded_unit = int(round(1.0 * leftover / vol_unit))
-						next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
-						arg_min = 99999999999999
-						num_key = str(action)+ ',n'
-						if num_key not in table[key]:
-							table[key][num_key] = 0
-						n = table[key][num_key]
-						next_state = table[next_key]
-						for k,v in next_state.items():
-							if type(k) != str: 
-								arg_min = v if arg_min > v else arg_min
-						if action not in table[key]:
-							table[key][action] = 0
-						table[key][action] = float(n)/(n+1)*table[key][action] + float(1)/(n+1)*(spent + arg_min)
-						table[key][num_key] += 1
-	executions = execute_algo(table, env, H, T, V, I, 100000, spreads, misbalances)
-	write_model_files(table, executions, T, L)
-	import pdb
-	pdb.set_trace()
+	return spreads, misbalances
 
 def compute_bid_ask_spread(curr_book, spreads):
 	spread = min(curr_book.a.keys()) - max(curr_book.b.keys())
@@ -96,8 +123,6 @@ def compute_bid_ask_spread(curr_book, spreads):
 	return len(spreads)
 
 def compute_volume_misbalance(curr_book, misbalances, env):
-	import pdb
-	pdb.set_trace()
 	m = env.misbalance(curr_book)
 	if len(misbalances) == 0 or m < misbalances[0]:
 		return 0
@@ -106,42 +131,42 @@ def compute_volume_misbalance(curr_book, misbalances, env):
 			return (i + 1)
 	return len(misbalances)
 
-def execute_algo(table, env, H, T, V, I, steps, spreads, misbalances):
+def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
+	# remaining volume and list of trades made by algorithm
 	executions = []
 	volume = V
+	# number of shares per unit of inventory
 	vol_unit = V/I
+	# number of timesteps in between decisions
 	time_unit = H/T
+	# number of decisions possible during test steps set
 	decisions = steps / time_unit
-	volumes = []
-	ds = []
+
 	for ts in range(0, decisions+1): 
+		# regenerate orderbook simulation for the next time horizon of decisions
 		if ts % (T+1) == 0:
 			env.get_timesteps(ts*time_unit, ts*time_unit+T*time_unit+1)
 			volume = V
+
+		# update the state of the algorithm based on the current book and timestep
 		rounded_unit = int(volume / vol_unit)
 		t_left =  ts % (T + 1)
-		perfect_price = env.mid_spread(ts - ts % (T + 1))
 		curr_book = env.get_next_state()
-
+		perfect_price = env.mid_spread(ts - ts % (T + 1))
 		spread = compute_bid_ask_spread(curr_book, spreads)
 		volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
-
-		key = str(t_left) + ',' + str(rounded_unit) + ',' + str(spread) + ',' + str(volume_misbalance)
 		actions = sorted(curr_book.a.keys())
 		actions.append(0)
-		print key + ' ' + str(ts)
-		min_action = -1
-		min_val = 999999999999
-		for action, value in table[key].items():
-			if type(action) != str:
-				if value < min_val:
-					min_val = value
-					min_action = action
+
+		min_action = table.greedy_action(t_left, rounded_unit, spread, volume_misbalance, ts)
 		paid, leftover = env.limit_order(0, actions[min_action], volume)
+
 		if t_left == T:
 			finish, clear = env.limit_order(0, 999999999999, leftover)
 			paid += clear * actions[-2] + paid
 			leftover = 0
+
+
 		if min_action == len(actions) - 1 or (paid == 0 and leftover == volume):
 			executions.append([t_left, rounded_unit, spread, volume_misbalance, min_action, 'no trade ', 0])
 			continue
@@ -151,9 +176,11 @@ def execute_algo(table, env, H, T, V, I, steps, spreads, misbalances):
 			reward = [t_left, rounded_unit, spread, volume_misbalance, min_action, basis_p, volume - leftover]
 			executions.append(reward)
 		volume = leftover
-		if ts % T != 0:
-			for i in range(0, time_unit - 1):
-				env.get_next_state()	
+
+		# simulate market till next decision point
+		for i in range(0, time_unit - 1):
+			env.get_next_state()	
+
 	return executions
 
 
@@ -175,13 +202,7 @@ def write_model_files(table, executions, T, L):
 				table_rows.append([t_left, rounded_unit, spread, volume_misbalance, action, payoff])
 	tw.writerows(table_rows)
 
-
-
-
-
-
-
-					
+	
 			
 if __name__ == "__main__":
-	dp_algo("../data/10_GOOG.csv", 100, 1000, 4, 4, 11)
+	dp_algo("../data/10_GOOG.csv", 1000, 1000, 4, 4, 10)

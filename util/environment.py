@@ -39,14 +39,12 @@ class Environment:
 			print "Timesteps out of bounds!"
 			return
 
+		# have t
 		self.max_spread = -1
 		self.min_spread = 99999999999999
 
 		self.max_misbalance = -1
 		self.min_misbalance = 9999999999999
-
-		self.max_volume = -1
-		self.min_volume = 9999999999999
 
 		self.current_timestep = 0
 		self.time_steps = []
