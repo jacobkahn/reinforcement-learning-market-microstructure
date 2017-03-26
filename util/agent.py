@@ -69,7 +69,7 @@ class Q:
 				self.Q[key] = {}
 			if num_key not in self.Q[key]:
 				self.Q[key][num_key] = 0
-			if action not in use_Q[key]:
+			if action not in self.Q[key]:
 				self.Q[key][action] = 0
 			n = self.Q[key][num_key]
 			# determine limit price this action specifies and submit it to orderbook
