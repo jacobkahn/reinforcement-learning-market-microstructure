@@ -1,5 +1,6 @@
 from environment import *
 from collections import defaultdict
+import random
 import csv
 import sys
 
@@ -50,14 +51,16 @@ class Q:
 				for k,v in next_state.items():
 					if type(k) != str: 
 						arg_min = v if arg_min > v else arg_min
-			# update key
+			# update key entry
 			self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
 			self.Q[key][num_key] += 1
-		elif self.backup['name'] == "doubleQ": 
-			
+		elif self.backup['name'] == "replay buffer":
+			# pull replay information
+			replays = self.backup['replays']
+			size = self.backup['buff_size']
 			# create keys to index into table
 			num_key = str(action)+ ',n'
-			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance) 
+			key = str(t) + "," + str(i)+ "," + str(spread) + "," +str(volume_misbalance) 
 			# set values appropriately for new keys
 			if key not in self.Q:
 				self.Q[key] = {}
@@ -69,11 +72,11 @@ class Q:
 			# determine limit price this action specifies and submit it to orderbook
 			limit_price = float("inf") if t == self.T else actions[action]
 			spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
-			# if at last step and leftovers, assume get the rest of the shares at the worst price in the book
+			# if at last step and leftovers, assume get the rest of the shares at the worst price in the book - no need to replay terminal states
 			if t == self.T:
 				if leftover	>= 0:
 					spent += leftover * actions[-2]
-				arg_min = 0
+				self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent)
 			else: 
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
@@ -82,9 +85,25 @@ class Q:
 				for k,v in next_state.items():
 					if type(k) != str: 
 						arg_min = v if arg_min > v else arg_min
-			# update key
-			self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
-			self.Q[key][num_key] += 1
+				# update the table with this key - we do this to make sure every key ends up in table at least once		
+				self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
+				self.Q[key][num_key] += 1
+				# add this SARSA transition to the buffer
+				self.buff.append((key, action, next_key, spent))
+				if len(self.buff) > size:
+					self.buff.pop(0)
+				# update table by sampling from buffer of transitions
+				for r in range(0, replays):
+					s,a,s_n, r = random.choice(self.buff)
+					c_key =  str(a)+ ',n'
+					num = self.Q[s][c_key]
+					n_s = self.Q[s_n]
+					a_m = float("inf")
+					for k,v in n_s.items():
+						if type(k) != str: 
+							a_m = v if a_m > v else a_m
+					self.Q[s][a] = float(num)/(num+1)*self.Q[s][a] + float(1)/(num+1)*(r + a_m)
+					self.Q[s][c_key] += 1
 		else:
 			print "Illegal backup"
 
@@ -117,8 +136,11 @@ Arguments:
 	S: Number of orderbooks to train Q function on
 	divs: Number of intervals to discretize spreads and misbalances 
 '''
-def dp_algo(ob_file, H, V, I, T, L, S=300, divs=5):
-	backup = { 'name': 'sampling'}
+def dp_algo(ob_file, H, V, I, T, L, S=10000, divs=10):
+	backup = { 'name': 'replay buffer', 
+				'buff_size': 100,
+				'replays': 20
+				}
 	table = Q(T, L, backup)
 	env = Environment(ob_file, setup=False)
 	all_books = len(env.books)
@@ -145,14 +167,14 @@ def dp_algo(ob_file, H, V, I, T, L, S=300, divs=5):
 			actions = sorted(curr_book.a.keys())
 			actions.append(0)
 			for i in range(0, I + 1):
-				for action in range(0, L):
+				for action in range(0, L+1):
 					# regenerate the order book so that we don't have the effects of the last action
 					curr_book = env.get_book(ts)
 					table.update_table_buy(t, i, vol_unit, spread, volume_misbalance, action, actions, env)
 	executions = execute_algo(table, env, H, V, I, T, 10000, spreads, misbalances)
+	write_model_files(table.Q, executions, T, L)
 	import pdb
 	pdb.set_trace()
-	write_model_files(table, executions, T, L)
 
 
 def create_variable_divs(divs, env):
@@ -244,8 +266,8 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
 
 
 def write_model_files(table, executions, T, L): 
-	table_file = open("table.csv", 'wb')
-	trade_file = open("trades.csv", 'wb')
+	table_file = open("table1.csv", 'wb')
+	trade_file = open("trades1.csv", 'wb')
 		# write trades executed
 	w = csv.writer(trade_file)	
 	executions.insert(0, ['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Action', 'Reward', 'Volume'])
@@ -264,4 +286,4 @@ def write_model_files(table, executions, T, L):
 	
 			
 if __name__ == "__main__":
-	dp_algo("../data/10_GOOG.csv", 1000, 1000, 4, 4, 11)
+	dp_algo("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10)
