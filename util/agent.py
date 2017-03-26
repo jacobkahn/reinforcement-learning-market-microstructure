@@ -54,6 +54,7 @@ class Q:
 			self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
 			self.Q[key][num_key] += 1
 		elif self.backup['name'] == "doubleQ": 
+			
 			# create keys to index into table
 			num_key = str(action)+ ',n'
 			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance) 
