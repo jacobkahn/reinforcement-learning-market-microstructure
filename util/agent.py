@@ -2,6 +2,7 @@ from environment import *
 from collections import defaultdict
 import csv
 import sys
+import random
 
 
 class Q:
@@ -15,24 +16,25 @@ class Q:
 		elif self.backup['name'] == 'doubleQ':
 			self.Q_1 = {}
 			self.Q_2 = {}
+			self.curr_Q = {} # aggregate average table, updated dynamically
 		elif self.backup['name'] == 'replay buffer':
 			self.Q = {}
 			self.buff = []
 		else:
-			print "Illegal Backup Type"	
+			print "Illegal Backup Type"
 
 	def update_table_buy(self, t, i, vol_unit, spread, volume_misbalance, action, actions, env):
-		if self.backup['name'] == "sampling": 
+		if self.backup['name'] == "sampling":
 			# create keys to index into table
 			num_key = str(action)+ ',n'
-			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance) 
+			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance)
 			# set values appropriately for new keys
 			if key not in self.Q:
 				self.Q[key] = {}
 			if num_key not in self.Q[key]:
 				self.Q[key][num_key] = 0
 			if action not in self.Q[key]:
-				self.Q[key][action] = 0	
+				self.Q[key][action] = 0
 			n = self.Q[key][num_key]
 			# determine limit price this action specifies and submit it to orderbook
 			limit_price = float("inf") if t == self.T else actions[action]
@@ -42,30 +44,34 @@ class Q:
 				if leftover	>= 0:
 					spent += leftover * actions[-2]
 				arg_min = 0
-			else: 
+			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
 				arg_min = float("inf")
 				next_state = self.Q[next_key]
 				for k,v in next_state.items():
-					if type(k) != str: 
+					if type(k) != str:
 						arg_min = v if arg_min > v else arg_min
 			# update key
 			self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
 			self.Q[key][num_key] += 1
-		elif self.backup['name'] == "doubleQ": 
-			
+		elif self.backup['name'] == "doubleQ":
+			print 'executing doubleQ update'
+
 			# create keys to index into table
 			num_key = str(action)+ ',n'
-			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance) 
+			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance)
 			# set values appropriately for new keys
-			if key not in self.Q:
-				self.Q[key] = {}
-			if num_key not in self.Q[key]:
-				self.Q[key][num_key] = 0
-			if action not in self.Q[key]:
-				self.Q[key][action] = 0	
-			n = self.Q[key][num_key]
+			# double Q, so flip a coin to determine which table to update
+			use_Q = [self.Q_1, self.Q_2][random.randint(1, 2)]
+
+			if key not in use_Q:
+				use_Q[key] = {}
+			if num_key not in use_Q[key]:
+				use_Q[key][num_key] = 0
+			if action not in use_Q[key]:
+				use_Q[key][action] = 0
+			n = use_Q[key][num_key]
 			# determine limit price this action specifies and submit it to orderbook
 			limit_price = float("inf") if t == self.T else actions[action]
 			spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
@@ -74,17 +80,35 @@ class Q:
 				if leftover	>= 0:
 					spent += leftover * actions[-2]
 				arg_min = 0
-			else: 
+			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
 				arg_min = float("inf")
-				next_state = self.Q[next_key]
+				next_state = self.curr_Q[next_key]
 				for k,v in next_state.items():
-					if type(k) != str: 
+					if type(k) != str:
 						arg_min = v if arg_min > v else arg_min
 			# update key
-			self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
-			self.Q[key][num_key] += 1
+			use_Q[key][action] = float(n)/(n+1) * use_Q[key][action] + float(1)/(n+1)*(spent + arg_min)
+			use_Q[key][num_key] += 1
+
+			# update the average curr_Q table
+			# set the num_key to the total number of times we see the action
+			Q_1_num_key = 0
+			Q_2_num_key = 0
+			if key in self.Q_1:
+				Q_1_num_key = self.Q_1[key][num_key]
+			elif key in self.Q_2:
+				Q_2_num_key = self.Q_2[key][num_key]
+			self.curr_Q[key][num_key] = Q_1_num_key + Q_2_num_key
+
+			# ensure the key and action are present in both tables
+			if key not in self.Q_1 or action not in self.Q_1[key]:
+				self.curr_Q[key][action] = self.Q_1[key][action]
+			elif key not in self.Q_2 or action not in self.Q_2[key]:
+				self.curr_Q[key][action] = self.Q_1[key][action]
+			else:
+				self.curr_Q[key][action] = (self.Q_1[key][action] + self.Q_2[key][action]) / 2
 		else:
 			print "Illegal backup"
 
@@ -100,12 +124,12 @@ class Q:
 					if value < min_val:
 						min_val = value
 						min_action = action
-		else: 
+		else:
 			# if we haven't seen this state, give most aggressive order - 0
 			return 0
 		return min_action
 
-''' 
+'''
 Algorithm from Kearns 2006 Paper
 Uses market variables for bid-ask spread and volume misbalance
 Arguments:
@@ -115,7 +139,7 @@ Arguments:
 	T: Number of decision points(units of time)
 	L: Number of actions to try(how many levels into the book we should consider)
 	S: Number of orderbooks to train Q function on
-	divs: Number of intervals to discretize spreads and misbalances 
+	divs: Number of intervals to discretize spreads and misbalances
 '''
 def dp_algo(ob_file, H, V, I, T, L, S=300, divs=5):
 	backup = { 'name': 'sampling'}
@@ -130,18 +154,18 @@ def dp_algo(ob_file, H, V, I, T, L, S=300, divs=5):
 	vol_unit = V/I
 	volume_misbalance = 0
 
-	env.get_timesteps(0, S+1)	
+	env.get_timesteps(0, S+1)
 	spreads, misbalances = create_variable_divs(divs, env)
-	
+
 	# loop for the DP algorithm
 	for t in range(0, T+1)[::-1]:
 		print t
-		for ts in range(0, S): 
+		for ts in range(0, S):
 			if ts % 1000 == 0:
 				print ts
 			curr_book = env.get_book(ts)
 			spread = compute_bid_ask_spread(curr_book, spreads)
-			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
+			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)
 			actions = sorted(curr_book.a.keys())
 			actions.append(0)
 			for i in range(0, I + 1):
@@ -152,7 +176,14 @@ def dp_algo(ob_file, H, V, I, T, L, S=300, divs=5):
 	executions = execute_algo(table, env, H, V, I, T, 10000, spreads, misbalances)
 	import pdb
 	pdb.set_trace()
-	write_model_files(table, executions, T, L)
+
+	if table.backup['name'] == 'sampling':
+		table_to_write = table.Q
+	elif table.backup['name'] == 'doubleQ':
+		table_to_write = table.curr_Q
+	else:
+		print 'agent.dp_algo - invalid backup method'
+	write_model_files(table_to_write, executions, T, L)
 
 
 def create_variable_divs(divs, env):
@@ -197,7 +228,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
 	# number of decisions possible during test steps set
 	decisions = steps / time_unit
 
-	for ts in range(0, decisions+1): 
+	for ts in range(0, decisions+1):
 		# regenerate orderbook simulation for the next time horizon of decisions
 		if ts % (T+1) == 0:
 			env.get_timesteps(ts*time_unit, ts*time_unit+T*time_unit+1)
@@ -209,7 +240,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
 		curr_book = env.get_next_state()
 		perfect_price = env.mid_spread(ts - ts % (T + 1))
 		spread = compute_bid_ask_spread(curr_book, spreads)
-		volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)	
+		volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)
 		actions = sorted(curr_book.a.keys())
 		actions.append(0)
 
@@ -238,16 +269,16 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
 		# simulate market till next decision point - no need to simulate after last decision point
 		if ts % T != 0:
 			for i in range(0, time_unit - 1):
-				env.get_next_state()	
+				env.get_next_state()
 
 	return executions
 
 
-def write_model_files(table, executions, T, L): 
+def write_model_files(table, executions, T, L):
 	table_file = open("table.csv", 'wb')
 	trade_file = open("trades.csv", 'wb')
 		# write trades executed
-	w = csv.writer(trade_file)	
+	w = csv.writer(trade_file)
 	executions.insert(0, ['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Action', 'Reward', 'Volume'])
 	w.writerows(executions)
 	# write table
@@ -261,7 +292,7 @@ def write_model_files(table, executions, T, L):
 				table_rows.append([t_left, rounded_unit, spread, volume_misbalance, action, payoff])
 	tw.writerows(table_rows)
 
-	
-			
+
+
 if __name__ == "__main__":
 	dp_algo("../data/10_GOOG.csv", 1000, 1000, 4, 4, 11)
