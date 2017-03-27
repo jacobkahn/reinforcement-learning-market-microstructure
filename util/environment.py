@@ -200,7 +200,6 @@ class OrderBook:
 		self.a = a
 		self.b = b
 
-
 	def clean_book(self):
 		# clean up gone price levels
 		for price, vol in self.a:

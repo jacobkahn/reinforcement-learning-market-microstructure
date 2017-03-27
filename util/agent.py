@@ -84,7 +84,7 @@ class Q:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
 				arg_min = float("inf")
-				next_state = self.curr_Q[next_key]
+				next_state = self.Q[next_key]
 				for k,v in next_state.items():
 					if type(k) != str:
 						arg_min = v if arg_min > v else arg_min
@@ -93,7 +93,7 @@ class Q:
 				self.Q[key][num_key] += 1
 				# add this SARSA transition to the buffer
 				self.buff.append((key, action, next_key, spent))
-				if len(self.buff) > size:
+				if len(self.buff) > size:	
 					self.buff.pop(0)
 				# update table by sampling from buffer of transitions
 				for r in range(0, replays):
@@ -192,7 +192,7 @@ Arguments:
 	S: Number of orderbooks to train Q function on
 	divs: Number of intervals to discretize spreads and misbalances
 '''
-def dp_algo(ob_file, H, V, I, T, L, S=10000, divs=10):
+def dp_algo(ob_file, H, V, I, T, L, S=2000, divs=10):
 	backup = { 'name': 'replay buffer', 
 				'buff_size': 100,
 				'replays': 20
@@ -227,7 +227,7 @@ def dp_algo(ob_file, H, V, I, T, L, S=10000, divs=10):
 					# regenerate the order book so that we don't have the effects of the last action
 					curr_book = env.get_book(ts)
 					table.update_table_buy(t, i, vol_unit, spread, volume_misbalance, action, actions, env)
-	executions = execute_algo(table, env, H, V, I, T, 10000, spreads, misbalances)
+	executions = execute_algo(table, env, H, V, I, T, 1000000, spreads, misbalances)
 	write_model_files(table.Q, executions, T, L)
 
 	if table.backup['name'] == 'sampling' or table.backup['name'] == 'replay buffer':
@@ -266,7 +266,7 @@ def compute_volume_misbalance(curr_book, misbalances, env):
 	if len(misbalances) == 0 or m < misbalances[0]:
 		return 0
 	for i in range(len(misbalances) - 1):
-		if m >= misbalances[i] and misbalances < misbalances[i+1]:
+		if m >= misbalances[i] and  m < misbalances[i+1]:
 			return (i + 1)
 	return len(misbalances)
 
@@ -325,6 +325,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
 				env.get_next_state()
 
 	return executions
+
 
 def write_model_files(table, executions, T, L):
 	table_file = open("table.csv", 'wb')
