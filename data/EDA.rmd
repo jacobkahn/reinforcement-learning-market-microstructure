@@ -2,24 +2,64 @@
 output: pdf_document
 ---
 
+The following includes some exploratory data analysis on the Lobster orderbook data. For this analysis, we use the Google ticker set 10 price levels per orderbook.
+
 ```{r, echo=FALSE}
-setwd("C:/Users/Amit/Documents/Github/reinforcement-learning-market-microstructure/data")
-timeseries = read.csv("50_SPY.csv")
-x = 1:1154736
-low_res = 1:11547
+# Our filepaths ;)
+# setwd("C:/Users/Amit/Documents/Github/reinforcement-learning-market-microstructure/data")
+setwd("/Users/jacobkahn/Documents/University of Pennsylvania -- Penn/Co-Curriculars Clubs and Competitions/Wharton Investment and Trading Group - QIS Quant/Quant -- Reinforcement Learning Trading/reinforcement-learning-market-microstructure")
+
+# Read in data
+timeseries_raw = read.csv("data/10_GOOG.csv")
+timeseries = data.frame(timeseries_raw)
+
+# Add time interval stamps
+timeseries$timestamp = seq.int(nrow(timeseries))
+
+# Extract asks and bids
 asks = timeseries[,1]
 bids = timeseries[,3]
+
+# Composite metrics
 spread = asks - bids
-low_res_spread = spread[1:1470*100]
 ask_vols = timeseries$X100
 bid_vols = timeseries$X496
 vol_spread = ask_vols - bid_vols
-plot(x, asks, "l")
- lines(x,bids, col="red")
-plot(low_res, low_res_spread, "l", col="blue")
-plot(x, ask_vols, "l")
-lines(x,bid_vols, col="red")
-plot(x, vol_spread, "l", col="blue")
+
+```
+
+We start by observing the overall state of the asset (Google class A shares). We plot the asks:
+```{r}
+# Plots
+# Asks
+plot(timeseries$timestamp, asks, "l")
+```
+
+Followed by the bids:
+```{r, echo=FALSE}
+# Bids
+plot(timeseries$timestamp, bids, "l")
+lines(timeseries$timestamp,bids, col="red")
+```
+
+The the price of the asset is in a clear state of decline over the course of the period. This market regime have several affets on the overall state of the algorithm and learning environment.
 
 
+We continue with bid volumes:
+```{r}
+# Bid vols
+plot(timeseries$timestamp, bid_vols, "l", col="blue")
+```
+
+And ask volumes:
+```{r}
+# Ask vols
+plot(timeseries$timestamp, ask_vols, "l")
+lines(timeseries$timestamp, ask_vols, col="red")
+```
+
+The volume on the spread:
+```{r}
+# Vol spread
+plot(timeseries$timestamp, vol_spread, "l", col="blue")
 ```

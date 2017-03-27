@@ -1,9 +1,9 @@
 from environment import *
 from collections import defaultdict
-import random
-import csv
+import csv # for reading
 import sys
-import random
+import random # for double q learning
+import multiprocess # for multithreading
 
 
 class Q:
@@ -93,7 +93,7 @@ class Q:
 				self.Q[key][num_key] += 1
 				# add this SARSA transition to the buffer
 				self.buff.append((key, action, next_key, spent))
-				if len(self.buff) > size:	
+				if len(self.buff) > size:
 					self.buff.pop(0)
 				# update table by sampling from buffer of transitions
 				for r in range(0, replays):
@@ -204,11 +204,8 @@ Arguments:
 	S: Number of orderbooks to train Q function on
 	divs: Number of intervals to discretize spreads and misbalances
 '''
-def dp_algo(ob_file, H, V, I, T, L, S=2000, divs=10):
-	backup = { 'name': 'replay buffer', 
-				'buff_size': 100,
-				'replays': 20
-				}
+def dp_algo(ob_file, H, V, I, T, L, backup, S=10000, divs=10):
+
 	table = Q(T, L, backup)
 	env = Environment(ob_file, setup=False)
 	all_books = len(env.books)
@@ -239,14 +236,21 @@ def dp_algo(ob_file, H, V, I, T, L, S=2000, divs=10):
 					# regenerate the order book so that we don't have the effects of the last action
 					curr_book = env.get_book(ts)
 					table.update_table_buy(t, i, vol_unit, spread, volume_misbalance, action, actions, env)
-	executions = execute_algo(table, env, H, V, I, T, 1000000, spreads, misbalances)
+	executions = execute_algo(table, env, H, V, I, T, 147000, spreads, misbalances)
+	process_output(table, executions, T, L)
+
+
+def process_output(table, executions, T, L):
+	"""
+	Process output for each run and write to file
+	"""
 	if table.backup['name'] == 'sampling' or table.backup['name'] == 'replay buffer':
 		table_to_write = table.Q
 	elif table.backup['name'] == 'doubleQ':
 		table_to_write = table.curr_Q
 	else:
 		print 'agent.dp_algo - invalid backup method'
-	write_model_files(table_to_write, executions, T, L)
+	write_model_files(table_to_write, executions, T, L, tableOutputFilename=table.backup['name'], tradesOutputFilename=table.backup['name'])
 
 
 def create_variable_divs(divs, env):
@@ -337,9 +341,9 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances):
 	return executions
 
 
-def write_model_files(table, executions, T, L):
-	table_file = open("table.csv", 'wb')
-	trade_file = open("trades.csv", 'wb')
+def write_model_files(table, executions, T, L, tableOutputFilename="run", tradesOutputFilename="run"):
+	table_file = open(tableOutputFilename + '-tables.csv', 'wb')
+	trade_file = open(tradesOutputFilename + '-trades.csv', 'wb')
 	# write trades executed
 	w = csv.writer(trade_file)
 	executions.insert(0, ['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Action', 'Reward', 'Volume'])
@@ -356,6 +360,29 @@ def write_model_files(table, executions, T, L):
 	tw.writerows(table_rows)
 
 
-
+"""
+We here run three backup methods based on how dp tables are updated:
+- sampling (simple update)
+- double q learning
+- replay buffer
+"""
 if __name__ == "__main__":
-	dp_algo("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10)
+	# define method params
+	doubleQbackup = {
+		'name': 'doubleQ'
+	}
+	samplingBackup = {
+		'name': 'sampling'
+	}
+	replayBufferBackup = { 'name': 'replay buffer',
+					'buff_size': 100,
+					'replays': 10
+	}
+	# start multithread run of each backup method
+	doubleQProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, doubleQbackup))
+	samplingProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, samplingBackup))
+	replayBufferProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, replayBufferBackup))
+	# start
+	doubleQProcess.start()
+	samplingProcess.start()
+	replayBufferProcess.start()
