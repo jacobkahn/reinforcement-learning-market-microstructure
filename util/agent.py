@@ -204,7 +204,7 @@ Arguments:
 	S: Number of orderbooks to train Q function on
 	divs: Number of intervals to discretize spreads and misbalances
 '''
-def dp_algo(ob_file, H, V, I, T, L, backup, S=10000, divs=10):
+def dp_algo(ob_file, H, V, I, T, L, backup, S=100000, divs=10):
 
 	table = Q(T, L, backup)
 	env = Environment(ob_file, setup=False)
