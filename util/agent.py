@@ -63,7 +63,7 @@ class Q:
 			size = self.backup['buff_size']
 			# create keys to index into table
 			num_key = str(action)+ ',n'
-			key = str(t) + "," + str(i)+ "," + str(spread) + "," +str(volume_misbalance) 
+			key = str(t) + "," + str(i)+ "," + str(spread) + "," +str(volume_misbalance)
 			# update table for new keys
 			if key not in self.Q:
 				self.Q[key] = {}
@@ -80,7 +80,7 @@ class Q:
 				if leftover	>= 0:
 					spent += leftover * actions[-2]
 					self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent)
-			else: 
+			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
 				arg_min = float("inf")
@@ -88,7 +88,7 @@ class Q:
 				for k,v in next_state.items():
 					if type(k) != str:
 						arg_min = v if arg_min > v else arg_min
-				# update the table with this key - we do this to make sure every key ends up in table at least once		
+				# update the table with this key - we do this to make sure every key ends up in table at least once
 				self.Q[key][action] = float(n)/(n+1)*self.Q[key][action] + float(1)/(n+1)*(spent + arg_min)
 				self.Q[key][num_key] += 1
 				# add this SARSA transition to the buffer
@@ -103,19 +103,19 @@ class Q:
 					n_s = self.Q[s_n]
 					a_m = float("inf")
 					for k,v in n_s.items():
-						if type(k) != str: 
+						if type(k) != str:
 							a_m = v if a_m > v else a_m
 					self.Q[s][a] = float(num)/(num+1)*self.Q[s][a] + float(1)/(num+1)*(r + a_m)
 					self.Q[s][c_key] += 1
 
 		elif self.backup['name'] == "doubleQ":
-			print 'executing doubleQ update'
 			# create keys to index into table
 			num_key = str(action)+ ',n'
 			key = str(t) + "," + str(i)+ "," +str(spread) + "," +str(volume_misbalance)
 			# set values appropriately for new keys
-			# double Q, so flip a coin to determine which table to update
-			use_Q = [self.Q_1, self.Q_2][random.randint(1, 2)]
+			# double Q, so flip a coin to determine which table to update (Q1 or Q2)
+			Q_table_number = random.randint(1, 2) - 1
+			use_Q = [self.Q_1, self.Q_2][Q_table_number]
 			if key not in use_Q:
 				use_Q[key] = {}
 			if num_key not in use_Q[key]:
@@ -135,26 +135,38 @@ class Q:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance)
 				arg_min = float("inf")
-				next_state = self.curr_Q[next_key]
+				# use the opposite table to the current one (flip lookup)
+				next_state_table = [self.Q_2, self.Q_1][Q_table_number]
+				# if the other table doesn't have a next state, then use the reverted table next state
+				if not next_key in next_state_table:
+					next_state_table = use_Q
+				next_state = next_state_table[next_key]
 				for k,v in next_state.items():
 					if type(k) != str:
 						arg_min = v if arg_min > v else arg_min
 			# update key
-			use_Q[key][action] = float(n)/(n+1) * use_Q[key][action] + float(1)/(n+1)*(spent + arg_min)
+			use_Q[key][action] = float(n) / (n+1) * use_Q[key][action] + float(1) / (n + 1) * (spent + arg_min)
 			use_Q[key][num_key] += 1
 
 			# update the average curr_Q table
+			# make sure keys are in place
+			if key not in self.curr_Q:
+				self.curr_Q[key] = {}
+			if num_key not in self.curr_Q[key]:
+				self.curr_Q[key][num_key] = 0
+			if action not in self.curr_Q[key]:
+				self.curr_Q[key][action] = 0
 			# set the num_key to the total number of times we see the action
 			Q_1_num_key = 0
 			Q_2_num_key = 0
-			if key in self.Q_1:
+			if key in self.Q_1 and num_key in self.Q_1[key]:
 				Q_1_num_key = self.Q_1[key][num_key]
-			elif key in self.Q_2:
+			elif key in self.Q_2 and num_key in self.Q_2[key]:
 				Q_2_num_key = self.Q_2[key][num_key]
 			self.curr_Q[key][num_key] = Q_1_num_key + Q_2_num_key
 			# ensure the key and action are present in both tables
 			if key not in self.Q_1 or action not in self.Q_1[key]:
-				self.curr_Q[key][action] = self.Q_1[key][action]
+				self.curr_Q[key][action] = self.Q_2[key][action]
 			elif key not in self.Q_2 or action not in self.Q_2[key]:
 				self.curr_Q[key][action] = self.Q_1[key][action]
 			else:
@@ -228,8 +240,6 @@ def dp_algo(ob_file, H, V, I, T, L, S=2000, divs=10):
 					curr_book = env.get_book(ts)
 					table.update_table_buy(t, i, vol_unit, spread, volume_misbalance, action, actions, env)
 	executions = execute_algo(table, env, H, V, I, T, 1000000, spreads, misbalances)
-	write_model_files(table.Q, executions, T, L)
-
 	if table.backup['name'] == 'sampling' or table.backup['name'] == 'replay buffer':
 		table_to_write = table.Q
 	elif table.backup['name'] == 'doubleQ':
