@@ -10,12 +10,12 @@ class Q_Function:
 		self.T = T
 		self.L = L
 		if self.backup['name'] == 'sampling':
-			self.Q = linear_model.SGDRegressor(loss='huber', penalty='l2', alpha=0.0001, rho=0.85, fit_intercept=True, n_iter=5, shuffle=False, verbose=0, p=0.1, seed=0, learning_rate='invscaling', eta0=0.01, power_t=0.25, warm_start=False)
+			self.Q = linear_model.SGDRegressor(loss='huber', penalty='l2', seed=0, learning_rate='invscaling', eta0=0.1, power_t=0.25, warm_start=False)
 		elif self.backup['name'] == 'doubleQ':
-			self.Q_1 = linear_model.SGDRegressor()
-			self.Q_2 = linear_model.SGDRegressor()
+			self.Q_1 = linear_model.SGDRegressor(loss='huber', penalty='l2', seed=0, learning_rate='invscaling', eta0=0.1, power_t=0.25, warm_start=False)
+			self.Q_2 = linear_model.SGDRegressor(loss='huber', penalty='l2', seed=0, learning_rate='invscaling', eta0=0.1, power_t=0.25, warm_start=False)
 		elif self.backup['name'] == 'replay buffer':
-			self.Q = linear_model.SGDRegressor()
+			self.Q = linear_model.SGDRegressor(loss='huber', penalty='l2', seed=0, learning_rate='invscaling', eta0=0.1, power_t=0.25, warm_start=False)
 			self.buff = []
 		else:
 			print "Illegal Backup Type"
