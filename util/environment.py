@@ -24,6 +24,7 @@ class Environment:
 		return (ask_prices[0] + bid_prices[0])/2
 
 	def get_book(self, t):
+		t = max(t,0)
 		book = self.books[t]
 		ask_prices = num(book[0::4])
 		ask_volumes = num(book[1::4])
