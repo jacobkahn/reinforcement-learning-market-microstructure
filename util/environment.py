@@ -6,6 +6,7 @@ import csv
 def num(l):
 	return [int(x) for x in l]
 
+
 class Environment:
 
 	def __init__(self, orderbook_file, setup=True, window = 100):
@@ -18,6 +19,7 @@ class Environment:
 			self.get_timesteps(0, len(self.books))
 
 	def mid_spread(self, t):
+		t = min(t, len(self.books))
 		book = self.books[t]
 		ask_prices = num(book[0::4])
 		bid_prices = num(book[2::4])
@@ -35,10 +37,12 @@ class Environment:
 		return ob
 
 	# generates the correct environment from timesteps start to end-1
-	def get_timesteps(self, start, end):
+	def get_timesteps(self, start, end, I, V, window=10):
 		if start < 0 or end > len(self.books):
 			print "Timesteps out of bounds!"
 			return
+		self.window = window
+		self.v_b = []
 
 		# have t
 		self.max_spread = -1
@@ -46,6 +50,17 @@ class Environment:
 
 		self.max_misbalance = -1
 		self.min_misbalance = 9999999999999
+
+		vol_units = V /I
+		self.min_imm_cost = float("inf")
+		self.max_imm_cost = -1
+
+		vol_buffer = []
+		vols = []
+		curr_vol = 0
+		self.min_signed_vol = 99999999999
+		self.max_signed_vol = -99999999999
+
 
 		self.current_timestep = 0
 		self.time_steps = []
@@ -57,11 +72,24 @@ class Environment:
 			bid_prices = num(book[2::4])
 			bid_volumes = num(book[3::4])	
 			if len(self.time_steps) > 0:
-				ob = curr_book.diff(ask_prices, ask_volumes, bid_prices, bid_volumes)
+				ob, n_v = curr_book.diff(ask_prices, ask_volumes, bid_prices, bid_volumes)
+				ob.set_s_vol(n_v)
 				self.time_steps.append(ob)
 				curr_book.apply_diff(self.time_steps[-1])
+				vol_buffer.append(n_v)
+				curr_vol += n_v
+				if len(vol_buffer) > window:
+					curr_vol -= vol_buffer[0]
+					vol_buffer.pop(0)
+					self.max_signed_vol = self.max_signed_vol if self.max_signed_vol > curr_vol else curr_vol
+					self.min_signed_vol = self.min_signed_vol if self.min_signed_vol < curr_vol else curr_vol
+					vols.append(curr_vol)
+				else:
+					vols.append(curr_vol)
+
 			else:
 				ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
+				ob.set_s_vol(0)
 				curr_book = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				self.time_steps.append(ob)
 
@@ -74,6 +102,12 @@ class Environment:
 			self.min_spread = self.min_spread if self.min_spread < s else s
 			self.max_misbalance = self.max_misbalance if self.max_misbalance > m else m
 			self.min_misbalance = self.min_misbalance if self.min_misbalance < m else m
+			for j in range(0, 2): 
+				u = 0 if j is 0 else I
+				im = curr_book.immediate_cost_buy(vol_units*u + 1)
+				self.max_imm_cost = self.max_imm_cost if self.max_imm_cost > im else im
+				self.min_imm_cost = self.min_imm_cost if self.min_imm_cost < im else im
+		return vols
 
 
 	def spread(self, ask_prices, bid_prices):
@@ -102,9 +136,16 @@ class Environment:
 			return OrderBook([],[],[],[])
 		else:
 			if self.current_timestep == 0:
+				self.running_vol = 0
 				self.curr_book = self.time_steps[0]
 			else:
+				self.v_b.append(self.time_steps[self.current_timestep].signed_vol)
+				self.running_vol += self.v_b[-1]
+				if len(self.v_b) > self.window:
+					self.running_vol -= self.v_b[0]
+					self.v_b.pop(0)
 				self.curr_book.apply_diff(self.time_steps[self.current_timestep])
+
 			self.current_timestep += 1
 			return self.curr_book 
 
@@ -153,6 +194,10 @@ class OrderBook:
 		for i in range(len(asks)):
 			self.b[bids[i]] = bid_vols[i]
 
+
+	def set_s_vol(self, s_v):
+		self.signed_vol = s_v
+
 	'''
 	Assumes this is orderbook at step t, takes info for step t+1,
 	creates a new order book with the additional or fewer shares now offered
@@ -161,6 +206,7 @@ class OrderBook:
 	actual changes from the market. 
 	'''
 	def diff(self, asks, ask_vols, bids, bid_vols):
+		net_vol = 0
 		new_a = []
 		new_av = []
 		new_b = []
@@ -169,16 +215,18 @@ class OrderBook:
 			if asks[i] in self.a:
 				new_a.append(asks[i])
 				new_av.append(ask_vols[i] - self.a[asks[i]])
+				net_vol	+= ask_vols[i] - self.a[asks[i]]
 			else:
 				new_a.append(asks[i])
 				new_av.append(ask_vols[i])
 			if bids[i] in self.b:
 				new_b.append(bids[i])
 				new_bv.append(bid_vols[i] - self.b[bids[i]])
+				net_vol	-= bid_vols[i] - self.b[bids[i]]
 			else:
 				new_b.append(bids[i])
 				new_bv.append(bid_vols[i])
-		return OrderBook(new_a, new_av, new_b, new_bv)
+		return OrderBook(new_a, new_av, new_b, new_bv), net_vol
 		 
 	'''
 	Takes difference orderbook and applies it to this one.
@@ -210,6 +258,18 @@ class OrderBook:
 			if vol == 0:
 				del self.b[price]
 
+	def immediate_cost_buy(self, units):
+		total = 0
+		rem = units
+		for pr, v in sorted(self.a.items()):
+			if rem > v:
+				total += pr * v
+				rem -= v
+			else:
+				total += pr * rem
+				return float(total)/ units
+		if rem > 0:
+			return float(total + pr * rem)/units
 
 	def order(self, side, price, volume):
 		# add proper error handling eventually
