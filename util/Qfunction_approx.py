@@ -6,7 +6,7 @@ from sklearn import linear_model
 class Q_Function:
 
 	def __init__(self, T, L, backup):
-		self.backup = backup
+		self.backup = backup		
 		self.T = T
 		self.L = L
 		if self.backup['name'] == 'sampling':
@@ -23,7 +23,7 @@ class Q_Function:
 	def update_table_buy(self, t, i, vol_unit, spread, volume_misbalance, im_cost, signed_vol, action, actions, env, tgt):
 		# create keys to index into table
 		num_key = str(action)+ ',n'
-		key = str(t) + "," + str(i) + "," + str(spread) + "," +str(volume_misbalance) + str(im_cost) + "," +str(signed_vol)
+		key = str(t) + "," + str(i) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 
 		if self.backup['name'] == "sampling":
 			# determine limit price this action specifies and submit it to orderbook
@@ -37,7 +37,7 @@ class Q_Function:
 				arg_min = 0
 			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
-				next_key = str(t + 1) + "," + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + str(im_cost) + "," +str(signed_vol)
+				next_key = str(t + 1) + "," + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 				_, arg_min = self.arg_min(next_key)
 			# update key entry
 			diff = vol_unit * i - leftover
@@ -49,7 +49,7 @@ class Q_Function:
 			self.Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 
 		elif self.backup['name'] == "replay buffer":
-			# pull replay information
+			# pull replay information		
 			replays = self.backup['replays']
 			size = self.backup['buff_size']
 			# determine limit price this action specifies and submit it to orderbook
@@ -68,7 +68,7 @@ class Q_Function:
 					self.Q.partial_fit(np.array(s, ndmin=2), np.array((t_cost), ndmin=1))
 			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
-				next_key = str(t + 1) + "," + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + str(im_cost) + "," +str(signed_vol)
+				next_key = str(t + 1) + "," + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 				_, arg_min = self.arg_min(next_key)
 
 				# update the table with this key 
@@ -107,7 +107,7 @@ class Q_Function:
 				arg_min = 0
 			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
-				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance) + str(im_cost) + "," +str(signed_vol)
+				next_key = str(t + 1) + "," + str(rounded_unit)+ "," + str(spread) + "," +str(volume_misbalance) + ','+ str(im_cost) + "," +str(signed_vol)
 				arg_min = float("inf")
 				# use the opposite table to the current one (flip lookup)
 				next_state_table = [self.Q_2, self.Q_1][Q_table_number]
