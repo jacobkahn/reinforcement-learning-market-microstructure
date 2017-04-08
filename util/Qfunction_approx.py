@@ -144,7 +144,7 @@ class Q_Function:
 	def greedy_action(self, t_left, rounded_unit, spread, volume_misbalance, im_cost, signed_vol, ts):
 		min_action = -1
 		min_val = float("inf")
-		key = str(t_left) + ',' + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + str(im_cost) + "," +str(signed_vol)
+		key = str(t_left) + ',' + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 		for action in range(self.L+1):
 			x = [int(n) for n in key.split(',')]
 			x.append(int(action))
