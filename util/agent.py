@@ -72,7 +72,7 @@ def process_output(table, func, executions, T, L):
 	Process output for each run and write to file
 	"""
 	if table.backup['name'] == 'sampling' or table.backup['name'] == 'replay buffer':
-		table_to_write = table.Q	
+		table_to_write = table.Q
 	elif table.backup['name'] == 'doubleQ':
 		if func is None:
 			table_to_write = table.curr_Q
@@ -220,8 +220,11 @@ def write_function(function, T, L, model,  functionFilename='run'):
 	if type(function) is list:
 		table_rows.append(function[0].coef_)
 		table_rows.append(function[1].coef_)
+		table_rows.append(function[0].intercept_)
+		table_rows.append(function[1].intercept_)
 	else:
 		table_rows.append(function.coef_)
+		table_rows.append(function.intercept_)
 	tw.writerows(table_rows)
 	## TO DO
 
@@ -247,7 +250,7 @@ We here run three backup methods based on how dp tables are updated:
 """
 if __name__ == "__main__":
 	# define method params
-	doubleQbackup = {		
+	doubleQbackup = {
 		'name': 'doubleQ'
 	}
 	samplingBackup = {
