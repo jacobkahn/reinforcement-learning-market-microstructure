@@ -83,7 +83,13 @@ def process_output(table, func, executions, T, L):
 	else:
 		print 'agent.dp_algo - invalid backup method'
 
-	write_trades(executions, tradesOutputFilename=table.backup['name'])
+	tradesOutputFilename = ''
+	if not func is None:
+		# linear approx model
+		tradesOutputFilename += 'linear-'
+
+	tradesOutputFilename += table.backup['name']
+	write_trades(executions, tradesOutputFilename=tradesOutputFilename)
 
 	if func is None:
 		write_table_files(table_to_write, T, L, tableOutputFilename=table.backup['name'])
