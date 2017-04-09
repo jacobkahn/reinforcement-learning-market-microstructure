@@ -21,7 +21,7 @@ Arguments:
 
 '''
 
-def dp_algo(ob_file, H, V, I, T, L, backup, func_approx=None, S=10, divs=10):
+def dp_algo(ob_file, H, V, I, T, L, backup, func_approx=None, S=1000, divs=10):
 
 	if func_approx is not None:
 		table = Q_Function(T, L, backup)

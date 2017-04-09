@@ -22,6 +22,7 @@ class Q_Function:
 
 	def update_table_buy(self, t, i, vol_unit, spread, volume_misbalance, im_cost, signed_vol, action, actions, env, tgt):
 		# create keys to index into table
+		in_a = -1 if action == self.L else action
 		num_key = str(action)+ ',n'
 		key = str(t) + "," + str(i) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 
@@ -45,7 +46,7 @@ class Q_Function:
 			t_cost =  (float(price_paid) - tgt)/tgt * 100
 			weighted_reward = (t_cost * diff + arg_min * leftover)/(vol_unit * i) if i!=0 else 0
 			s = [int(n) for n in key.split(',')]
-			s.append(int(action))
+			s.append(int(in_a))
 			self.Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 
 		elif self.backup['name'] == "replay buffer":
@@ -64,7 +65,7 @@ class Q_Function:
 					price_paid =  tgt if diff == 0 else spent / diff
 					t_cost =  (float(price_paid) - tgt)/tgt * 100
 					s = [int(n) for n in key.split(',')]
-					s.append(int(action))
+					s.append(int(in_a))
 					self.Q.partial_fit(np.array(s, ndmin=2), np.array((t_cost), ndmin=1))
 			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
@@ -77,7 +78,7 @@ class Q_Function:
 				t_cost =  (float(price_paid) - tgt)/tgt * 100
 				weighted_reward = (t_cost * diff + arg_min * leftover)/(vol_unit * i) if i!=0 else 0
 				s = [int(n) for n in key.split(',')]
-				s.append(int(action))
+				s.append(int(in_a))
 				self.Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 				# add this SARSA transition to the buffer
 				self.buff.append((key, action, next_key, t_cost, diff, leftover))
@@ -88,7 +89,7 @@ class Q_Function:
 					s,a,s_n, t_c, d, l = random.choice(self.buff)
 					_, a_m = self.arg_min(s_n)
 					s = [int(n) for n in s_n.split(',')]
-					s.append(int(action))
+					s.append(int(in_a))
 					w_r = (t_c*d + a_m * l)/(d + l) if d + l != 0 else 0
 					self.Q.partial_fit(np.array(s, ndmin=2), np.array((w_r), ndmin=1))
 
@@ -119,7 +120,7 @@ class Q_Function:
 			t_cost =  (float(price_paid) - tgt)/tgt * 100
 			weighted_reward = (t_cost * diff + arg_min * leftover)/(vol_unit * i) if i!=0 else 0
 			s = [int(n) for n in key.split(',')]
-			s.append(int(action))
+			s.append(int(in_a))
 			use_Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 
 		else:
@@ -132,8 +133,9 @@ class Q_Function:
 		min_action = -1
 		min_val = float("inf")
 		for action in range(self.L+1):
+			in_a = -1 if action == self.L else action
 			x = [int(n) for n in key.split(',')]
-			x.append(int(action))
+			x.append(int(in_a))
 			value = func.predict(np.array(x,ndmin=2))
 			if value < min_val:
 					min_val = value
@@ -146,8 +148,9 @@ class Q_Function:
 		min_val = float("inf")
 		key = str(t_left) + ',' + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 		for action in range(self.L+1):
+			in_a = -1 if action == self.L else action
 			x = [int(n) for n in key.split(',')]
-			x.append(int(action))
+			x.append(int(in_a))
 			if self.backup['name'] == 'doubleQ':
 				value = (self.Q_1.predict(np.array(x,ndmin=2)) + self.Q_2.predict(np.array(x,ndmin=2)))/2
 			else:	
