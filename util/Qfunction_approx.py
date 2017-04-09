@@ -1,6 +1,7 @@
 from environment import *
 import random # for double q learning
 import numpy as np 
+from sklearn.preprocessing import PolynomialFeatures
 from sklearn import linear_model
 
 class Q_Function:
@@ -9,6 +10,7 @@ class Q_Function:
 		self.backup = backup		
 		self.T = T
 		self.L = L
+		self.pre_process = PolynomialFeatures(degree=2, include_bias=False)
 		if self.backup['name'] == 'sampling':
 			self.Q = linear_model.SGDRegressor(loss='huber', penalty='l2', learning_rate='invscaling', eta0=0.1, power_t=0.25, warm_start=False)
 		elif self.backup['name'] == 'doubleQ':
@@ -19,6 +21,15 @@ class Q_Function:
 			self.buff = []
 		else:
 			print "Illegal Backup Type"
+
+	def train_example(self, func, x, y):
+		x += 2
+		func.partial_fit(self.pre_process.fit_transform(x), y)
+		print self.backup['name'] + ' ' + str(x) + ' ' + str(y)
+
+	def predict(self, func, x):
+		x += 2
+		return func.predict(self.pre_process.fit_transform(x))
 
 	def update_table_buy(self, t, i, vol_unit, spread, volume_misbalance, im_cost, signed_vol, action, actions, env, tgt):
 		# create keys to index into table
@@ -47,7 +58,7 @@ class Q_Function:
 			weighted_reward = (t_cost * diff + arg_min * leftover)/(vol_unit * i) if i!=0 else 0
 			s = [int(n) for n in key.split(',')]
 			s.append(int(in_a))
-			self.Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
+			self.train_example(self.Q, np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 
 		elif self.backup['name'] == "replay buffer":
 			# pull replay information		
@@ -66,7 +77,7 @@ class Q_Function:
 					t_cost =  (float(price_paid) - tgt)/tgt * 100
 					s = [int(n) for n in key.split(',')]
 					s.append(int(in_a))
-					self.Q.partial_fit(np.array(s, ndmin=2), np.array((t_cost), ndmin=1))
+					self.train_example(self.Q, np.array(s, ndmin=2), np.array(t_cost, ndmin=1))
 			else:
 				rounded_unit = int(round(1.0 * leftover / vol_unit))
 				next_key = str(t + 1) + "," + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
@@ -79,7 +90,7 @@ class Q_Function:
 				weighted_reward = (t_cost * diff + arg_min * leftover)/(vol_unit * i) if i!=0 else 0
 				s = [int(n) for n in key.split(',')]
 				s.append(int(in_a))
-				self.Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
+				self.train_example(self.Q, np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 				# add this SARSA transition to the buffer
 				self.buff.append((key, action, next_key, t_cost, diff, leftover))
 				if len(self.buff) > size:
@@ -91,7 +102,7 @@ class Q_Function:
 					s = [int(n) for n in s_n.split(',')]
 					s.append(int(in_a))
 					w_r = (t_c*d + a_m * l)/(d + l) if d + l != 0 else 0
-					self.Q.partial_fit(np.array(s, ndmin=2), np.array((w_r), ndmin=1))
+					self.train_example(self.Q, np.array(s, ndmin=2), np.array((w_r), ndmin=1))
 
 		elif self.backup['name'] == "doubleQ":
 			# set values appropriately for new keys
@@ -121,7 +132,7 @@ class Q_Function:
 			weighted_reward = (t_cost * diff + arg_min * leftover)/(vol_unit * i) if i!=0 else 0
 			s = [int(n) for n in key.split(',')]
 			s.append(int(in_a))
-			use_Q.partial_fit(np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
+			self.train_example(use_Q, np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 
 		else:
 			print "Illegal backup"
@@ -136,7 +147,7 @@ class Q_Function:
 			in_a = -1 if action == self.L else action
 			x = [int(n) for n in key.split(',')]
 			x.append(int(in_a))
-			value = func.predict(np.array(x,ndmin=2))
+			value = self.predict(func, np.array(x,ndmin=2))
 			if value < min_val:
 					min_val = value
 					min_action = action
@@ -152,9 +163,9 @@ class Q_Function:
 			x = [int(n) for n in key.split(',')]
 			x.append(int(in_a))
 			if self.backup['name'] == 'doubleQ':
-				value = (self.Q_1.predict(np.array(x,ndmin=2)) + self.Q_2.predict(np.array(x,ndmin=2)))/2
+				value = (self.predict(self.Q_1, np.array(x,ndmin=2)) + self.predict(self.Q_2, np.array(x,ndmin=2)))/2
 			else:	
-				value = self.Q.predict(np.array(x,ndmin=2))
+				value = self.predict(self.Q, np.array(x,ndmin=2))
 			if value < min_val:
 					min_val = value
 					min_action = action
