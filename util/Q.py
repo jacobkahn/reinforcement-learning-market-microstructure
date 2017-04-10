@@ -174,23 +174,23 @@ class Q:
 					if value < min_val:
 						min_val = value
 						min_action = action
+			return min_action, min_val
 		else:
 			total = 0
 			counter = 0
 			prefix = ','.join(key.split(',')[0:2])
-			for key in table:
-				if key.startswith(prefix):
+			for k in table:
+				if k.startswith(prefix):
 					min_a = float('inf')
 					min_v = float('inf')
-					for a,v in table[key].items():
+					for a,v in table[k].items():
 					 	if type(a) != str:
-							if v < min_val:
+							if v < min_v:
 								min_v = v
 								min_a = a
 					return min_a, min_v
 			# if we haven't seen this state, give most aggressive order - 0
 			return 0, 0
-		return min_action, min_val
 
 
 	def greedy_action(self, t_left, rounded_unit, spread, volume_misbalance, im_cost, signed_vol, ts):
@@ -204,17 +204,19 @@ class Q:
 					if value < min_val:
 						min_val = value
 						min_action = action
+			return min_action, min_val
 		else:
+			min_a = float('inf')
+			min_v = float('inf')
 			key_prefix = str(t_left) + ',' + str(rounded_unit)
-			for key in table:
-				if key.startswith(key_prefix):
-					min_a = float('inf')
-					min_v = float('inf')
-					for a,v in table[key].items():
+			for k in table:
+				if k.startswith(key_prefix):
+					for a,v in table[k].items():
 					 	if type(a) != str:
-							if v < min_val:
+							if v < min_v:
 								min_v = v
 								min_a = a
 					return min_a, min_v
 			return 0, 0
-		return min_action, min_val
+		import pdb
+		pdb.set_trace()

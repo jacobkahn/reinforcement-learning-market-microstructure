@@ -21,7 +21,7 @@ Arguments:
 
 '''
 
-def dp_algo(ob_file, H, V, I, T, L, backup, func_approx=None, S=1, divs=10):
+def dp_algo(ob_file, H, V, I, T, L, backup, func_approx=None, S=100, divs=10):
 
 	if func_approx is not None:
 		table = Q_Function(T, L, backup)
@@ -188,7 +188,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances, imm_costs,
 		# compute and execute the next action using the table
 		min_action, _ = table.greedy_action(t_left, rounded_unit, spread, volume_misbalance, immediate_cost, signed_vol, ts)
 		paid, leftover = env.limit_order(0, actions[min_action], volume)
-
+		print min_action
 		# if we are at the last time step, have to submit everything remaining to OB
 		if t_left == T:
 			additional_spent, overflow = env.limit_order(0, float("inf"), leftover)
@@ -267,19 +267,19 @@ if __name__ == "__main__":
 					'replays': 5
 	}
 	# tables
-	# doubleQProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, doubleQbackup))
-	# samplingProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, samplingBackup))
-	# replayBufferProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, replayBufferBackup))
+	doubleQProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, doubleQbackup))
+	samplingProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, samplingBackup))
+	replayBufferProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, replayBufferBackup))
 	# start
-	# doubleQProcess.start()
-	# samplingProcess.start()
-	# replayBufferProcess.start()
+	#doubleQProcess.start()
+	samplingProcess.start()
+	#replayBufferProcess.start()
 
 	# function approx
-	func_doubleQProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, doubleQbackup, "linear"))
-	func_samplingProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, samplingBackup, "linear"))
-	func_replayBufferProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, replayBufferBackup, "linear"))
+	#func_doubleQProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, doubleQbackup, "linear"))
+	#func_samplingProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, samplingBackup, "linear"))
+	#func_replayBufferProcess = multiprocess.Process(target=dp_algo, args=("../data/10_GOOG.csv", 1000, 1000, 10, 10, 10, replayBufferBackup, "linear"))
 	# start
-	func_doubleQProcess.start()
-	func_samplingProcess.start()
-	func_replayBufferProcess.start()
+	#func_doubleQProcess.start()
+	#func_samplingProcess.start()
+	#func_replayBufferProcess.start()
