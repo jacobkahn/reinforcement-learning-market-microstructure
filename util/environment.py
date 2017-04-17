@@ -291,13 +291,17 @@ class OrderBook:
 			return -2
 
 	def vectorize_book(self, price_levels):
-		ret = np.zeros(price_levels, 4)
-		ret[:,:] = -1
+		ret = np.zeros(shape=[price_levels * 4])
 		row = 0
-		for price, volume in self.a:
-			ret[row, 0] = price
-			ret[row, 1] = volume
-		for price, volume in self.b:
-			ret[row, 2] = price
-			ret[row, 3] = volume
+		for price, volume in self.a.items():
+			ret[row] = 1.0*price/10000000
+			row += 1
+			ret[row] = 1.0*volume/1000
+			row += 1
+		for price, volume in self.b.items():
+			ret[row] = 1.0*price/10000000
+			row += 1
+			ret[row] = 1.0*volume/1000
+			row += 1
+		return ret
 
