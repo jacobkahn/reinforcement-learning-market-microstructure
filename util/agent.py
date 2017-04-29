@@ -232,7 +232,6 @@ def write_function(function, T, L, model,  functionFilename='run'):
 		table_rows.append(function.coef_)
 		table_rows.append(function.intercept_)
 	tw.writerows(table_rows)
-	## TO DO
 
 def write_table_files(table, T, L, tableOutputFilename="run"):
 	table_file = open(tableOutputFilename + '-tables.csv', 'wb')

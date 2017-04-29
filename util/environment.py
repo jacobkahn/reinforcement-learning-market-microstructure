@@ -290,8 +290,8 @@ class OrderBook:
 			print "Invalid side code - OrderBook.order"
 			return -2
 
-	def vectorize_book(self, price_levels):
-		ret = np.zeros(shape=[price_levels * 4])
+	def vectorize_book(self, price_levels, time, inv):
+		ret = np.zeros(shape=[price_levels * 4 + 2])
 		row = 0
 		for price, volume in self.a.items():
 			ret[row] = 1.0*price/10000000
@@ -303,5 +303,11 @@ class OrderBook:
 			row += 1
 			ret[row] = 1.0*volume/1000
 			row += 1
+		ret[row] = time
+		row += 1
+		ret[row] = inv
+		if ret[row] > 10:
+			import pdb
+			pdb.set_trace()
 		return ret
 
