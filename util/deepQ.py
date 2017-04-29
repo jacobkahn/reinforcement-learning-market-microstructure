@@ -112,9 +112,8 @@ class Q_RNN:
 		return copy_operation
 	
 	def greedy_action(self, session, book_vec):
-		min_action = session.run((self.min_action), feed_dict={
-														self.input_place_holder: book
-													})
+		min_action = session.run((self.min_action), feed_dict={ self.input_place_holder: book})
+		return min_action
 
 
 
@@ -130,6 +129,7 @@ def create_input_window_test(env, ts, window, batch, ob_size, t, i):
 		window_vec = np.concatenate(vecs, axis=1)
 		return window_vec
 
+
 def create_input_window_train(env, ts, window, batch, ob_size, t, i):
 	if(ts < window - 1):
 		return np.zeros(shape=[batch, window, ob_size * 4 + 2])
@@ -143,7 +143,7 @@ def create_input_window_train(env, ts, window, batch, ob_size, t, i):
 
 
 
-def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances, imm_costs, signed_vols):
+def execute_algo(Q, env, H, V, I, T, steps):
 	# remaining volume and list of trades made by algorithm
 	executions = []
 	volume = V
@@ -165,8 +165,6 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances, imm_costs,
 		curr_book = env.get_next_state()
 		# ideal price is mid-spread end of the period
 		perfect_price = env.mid_spread(ts*time_unit + time_unit * (T- t_left))
-
-
 		actions = sorted(curr_book.a.keys())
 		actions.append(0)
 		# compute and execute the next action using the table
