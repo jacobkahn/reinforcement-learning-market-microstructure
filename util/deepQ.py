@@ -255,7 +255,6 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L):
 					print t_costs	
 					print np.mean(losses)
 				losses.append(loss)
-
 	print np.mean(losses)
 
 def train_DQN(epochs, ob_file, H, V, I, T, L, debug=False):
