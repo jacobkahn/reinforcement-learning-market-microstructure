@@ -306,8 +306,5 @@ class OrderBook:
 		ret[row] = time
 		row += 1
 		ret[row] = inv
-		if ret[row] > 10:
-			import pdb
-			pdb.set_trace()
 		return ret
 

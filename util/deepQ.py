@@ -91,7 +91,7 @@ class Q_RNN:
 			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
 			self.predictions = tf.tanh(tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32')) 	
 			self.min_score = tf.reduce_min(self.predictions, reduction_indices=[1])
-			self.min_action = tf.argmin(tf.squeese(self.predictions))
+			self.min_action = tf.argmin(tf.squeeze(self.predictions), axis=0, name="arg_min")
 
 
 	def add_training_objective(self):
@@ -112,22 +112,19 @@ class Q_RNN:
 		return copy_operation
 	
 	def greedy_action(self, session, book_vec):
-		min_action = session.run((self.min_action), feed_dict={ self.input_place_holder: book})
+		min_action = session.run((self.min_action), feed_dict={ self.input_place_holder: book_vec})
 		return min_action
 
 
 
 
-def create_input_window_test(env, ts, window, batch, ob_size, t, i):
-	if(ts < window - 1):
-		return np.zeros(shape=[batch, window, ob_size * 4 + 2])
-	else:
-		vecs = []
-		for idx in range(ts - window + 1, ts + 1):
-			book_vec = env.get_book(ts).vectorize_book(10, t, i).reshape(1,1,ob_size * 4 + 2)
-			vecs.append(book_vec)
-		window_vec = np.concatenate(vecs, axis=1)
-		return window_vec
+def create_input_window_test(env, window, ob_size, t, i):
+	vecs = []
+	for idx in range(0, window):
+		book_vec = env.get_next_state().vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
+		vecs.append(book_vec)
+	window_vec = np.concatenate(vecs, axis=1)
+	return window_vec
 
 
 def create_input_window_train(env, ts, window, batch, ob_size, t, i):
@@ -136,14 +133,18 @@ def create_input_window_train(env, ts, window, batch, ob_size, t, i):
 	else:
 		vecs = []
 		for idx in range(ts - window + 1, ts + 1):
-			book_vec = env.get_book(ts).vectorize_book(10, t, i).reshape(1,1,ob_size * 4 + 2)
+			book_vec = env.get_book(ts).vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
 			vecs.append(book_vec)
 		window_vec = np.concatenate(vecs, axis=1)
 		return window_vec
 
 
-
-def execute_algo(Q, env, H, V, I, T, steps):
+def execute_algo(Q, session, env, H, V, I, T, S, steps):
+	divs = 10
+	env.get_timesteps(0, S+1, I, V)
+	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
+	window = Q.params.window
+	ob_size = Q.params.ob_size
 	# remaining volume and list of trades made by algorithm
 	executions = []
 	volume = V
@@ -155,20 +156,29 @@ def execute_algo(Q, env, H, V, I, T, steps):
 	decisions = steps / time_unit
 
 	for ts in range(0, decisions+1):
-		# regenerate orderbook simulation for the next time horizon of decisions
-		if ts % (T+1) == 0:
-			env.get_timesteps(ts*time_unit, ts*time_unit+T*time_unit+1, T, V)
-			volume = V
 		# update the state of the algorithm based on the current book and timestep
 		rounded_unit = int(volume / vol_unit)
 		t_left =  ts % (T + 1)
-		curr_book = env.get_next_state()
+		# regenerate orderbook simulation for the next time horizon of decisions
+
+		if ts % (T+1) == 0:
+			env.get_timesteps(ts*time_unit, ts*time_unit+T*time_unit+window+1, T, V)
+			volume = V
+		if ts % (T + 1) != 0:
+			for i in range(0, time_unit - window):
+				env.get_next_state()
+		input_book = create_input_window_test(env, 	window, ob_size, rounded_unit, t_left)
+		curr_book = env.curr_book
+		spread = compute_bid_ask_spread(curr_book, spreads)
+		volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)
+		immediate_cost = compute_imm_cost(curr_book, volume, imm_costs)
+		signed_vol = compute_signed_vol(env.running_vol, signed_vols)
 		# ideal price is mid-spread end of the period
 		perfect_price = env.mid_spread(ts*time_unit + time_unit * (T- t_left))
 		actions = sorted(curr_book.a.keys())
 		actions.append(0)
 		# compute and execute the next action using the table
-		min_action, _ = table.greedy_action(t_left, rounded_unit, spread, volume_misbalance, immediate_cost, signed_vol, ts)
+		min_action = Q.greedy_action(session, input_book)
 		paid, leftover = env.limit_order(0, actions[min_action], volume)
 		print min_action
 		# if we are at the last time step, have to submit everything remaining to OB
@@ -176,7 +186,6 @@ def execute_algo(Q, env, H, V, I, T, steps):
 			additional_spent, overflow = env.limit_order(0, float("inf"), leftover)
 			paid += overflow * actions[-2] + additional_spent
 			leftover = 0
-
 		if leftover == volume:
 			reward = [t_left, rounded_unit, spread, volume_misbalance, min_action, 'no trade ', 0]
 		else:
@@ -186,27 +195,25 @@ def execute_algo(Q, env, H, V, I, T, steps):
 			print str(perfect_price) + ' ' + str(price_paid)
 		executions.append(reward)
 		volume = leftover
-		# simulate market till next decision point - no need to simulate after last decision point
-		if ts % T != 0:
-			for i in range(0, time_unit - 1):
-				env.get_next_state()
 	return executions
 
-
-def write_trades(executions, tradesOutputFilename="run"):
+def write_trades(executions, tradesOutputFilename="DQN"):
 	trade_file = open(tradesOutputFilename + '-trades.csv', 'wb')
 	# write trades executed
 	w = csv.writer(trade_file)
 	executions.insert(0, ['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Immediate Cost', 'Signed Transcation Volume' ,'Action', 'Reward', 'Volume'])
 	w.writerows(executions)
 
-def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L):
+def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
+
+	ob_size = Q.params.ob_size
+	window = Q.params.window
 	losses = []
 	vol_unit = V / I
 	time_unit = H / T
 	for t in range(T+1)[::-1]:
 		for i in range(I+1):
-			for ts in range(10, 1001):
+			for ts in range(1, S+1):
 				curr_book = env.get_book(ts)
 				tgt_price = env.mid_spread(ts)
 				actions = sorted(curr_book.a.keys())
@@ -223,7 +230,7 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L):
 						argmin = 0
 					else: 
 						rounded_unit = int(round(1.0 * leftover / vol_unit))
-						next_book_vec = create_input_window(env, ts + time_unit, 10, 1, 10, t + 1, rounded_unit)
+						next_book_vec = create_input_window_train(env, ts + time_unit, window, 1, ob_size, t + 1, rounded_unit)
 						next_scores, argmin = sess.run((Q_target.predictions, Q_target.min_score), feed_dict={
 														Q_target.input_place_holder: next_book_vec
 													})
@@ -234,7 +241,7 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L):
 					argmins[a] = argmin
 					t_costs[a] = t_cost
 				targ = backup.reshape(1, 11)
-				book_vec = create_input_window(env, ts, 10, 1, 10, t, i)
+				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
 				q_vals, loss, min_score, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})
 				if np.isnan(q_vals).any():
 					import pdb
@@ -268,12 +275,14 @@ def train_DQN(epochs, ob_file, H, V, I, T, L, debug=False):
 		sess.run(init)
 		sess.run(updateTargetOperation)
 		for i in range(1):
-			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L)
+			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S=1000)
+		executions = execute_algo(Q, sess, env, H, V, I, T, 100, 10000)
+		write_trades(executions)
 
 def write_function(function, T, L,functionFilename='deep Q'):
 	table_file = open(functionFilename + '.csv', 'wb')
 	tw = csv.writer(table_file)
-	table_rows = []
+	table_rows = []	
 	table_rows.append(['Time Left', 'Rounded Units Left', 'Action', 'Expected Payout'])
 	if type(function) is list:
 		table_rows.append(function[0].coef_)
