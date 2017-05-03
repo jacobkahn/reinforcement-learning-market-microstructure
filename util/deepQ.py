@@ -97,7 +97,7 @@ class Q_RNN:
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0) + tf.nn.l2_loss(self.U) + tf.nn.l2_loss(self.b_2)
 		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
 		self.gvs = self.trainer.compute_gradients(self.loss)
-		capped_gvs = [None if gradient is None else (tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
+		capped_gvs = [None if grad is None else (tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
 		self.updateWeights = self.trainer.apply_gradients(capped_gvs)
 
 	def copy_Q_Op(self, Q):
