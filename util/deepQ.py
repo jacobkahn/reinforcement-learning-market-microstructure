@@ -23,7 +23,7 @@ class Filters:
 def compute_outputsize(h, w, fsize, stride, padding, k):
 	W_2 = (w - fsize + 2 * padding)/ stride + 1
 	H_2 = (h - fsize + 2 * padding)/ stride + 1
-	return (W_2, H_2, k)
+	return [W_2, H_2, k]
 
 
 class Q_CNN: 
@@ -38,16 +38,16 @@ class Q_CNN:
 	def build_model_graph(self):
 		self.filter_tensors = {}
 		self.bias_tensors = {}
+		self.conv_layer_out = []
 		with tf.variable_scope(self.name) as self.scope:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
 			for fil, params in self.f.items():
 				n = 'filter_size_{}_stride_{}_num_{}'.format(params['size'], params['stride'], params['num'])
 				s = [params['size'], params['size'], 1, params['num']]
-				output_s = compute_outputsize(self.params.window, self.self.params.ob_size * 4 + 2,params['size'], params['num'] )
+				o_s = compute_outputsize(self.params.window, self.self.params.ob_size * 4 + 2,params['size'], params['stride'], 0, params['num'])
 				self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
-				self.bias_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n + '_bias')
+				self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[o_s], stddev=0.1), name=n + '_bias')
 				conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
-
 				
 
 
@@ -247,8 +247,13 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 					t_costs[a] = t_cost
 				targ = backup.reshape(1, 11)
 				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
-				q_vals, loss, min_score, gradients = sess.run((Q.predictions, Q.loss, Q.min_score, Q.clipped_gradients), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
-				if np.isnan(gradients).any() or np.isinf(gradients).any() or np.isnan(q_vals).any():
+				q_vals, loss, min_score, gradients = sess.run((Q.predictions, Q.loss, Q.min_score, Q.gvs), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
+				gradient_nan = False
+				for g in gradients:
+					if np.isnan(g).any() or np.isinf(g).any():
+						gradient_nan = True
+						break
+				if gradient_nan or np.isnan(q_vals).any():
 					import pdb
 					pdb.set_trace()
 				q_vals, loss, min_score, gradients, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.clipped_gradients, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
