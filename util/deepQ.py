@@ -90,7 +90,7 @@ class Q_RNN:
 			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [self.params.batch, 1, self.params.hidden_size]), axis=1)
 			self.U = tf.get_variable('U', shape=[self.params.hidden_size, self.params.actions])
 			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
-			self.predictions = tf.tanh(tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32'))
+			self.predictions = tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32') 
 			self.min_score = tf.reduce_min(self.predictions, reduction_indices=[1])
 			self.min_action = tf.argmin(tf.squeeze(self.predictions), axis=0, name="arg_min")
 
