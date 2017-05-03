@@ -20,6 +20,10 @@ class Filters:
 	def __init__(self, filters):
 		self.f = filters
 
+def compute_outputsize(h, w, fsize, stride, padding, k):
+	W_2 = (w - fsize + 2 * padding)/ stride + 1
+	H_2 = (h - fsize + 2 * padding)/ stride + 1
+	return (W_2, H_2, k)
 
 
 class Q_CNN: 
@@ -27,25 +31,24 @@ class Q_CNN:
 	def __init__(self, params, name, filters, target=False):
 		self.name = name
 		self.params = params
+		self.f = filters
 		self.build_model_graph()
 		self.add_training_objective()
 
 	def build_model_graph(self):
-		params = self.params 
 		self.filter_tensors = {}
+		self.bias_tensors = {}
 		with tf.variable_scope(self.name) as self.scope:
-			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2), name='input')
-			for fil, params in f.items():
+			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
+			for fil, params in self.f.items():
 				n = 'filter_size_{}_stride_{}_num_{}'.format(params['size'], params['stride'], params['num'])
 				s = [params['size'], params['size'], 1, params['num']]
+				output_s = compute_outputsize(self.params.window, self.self.params.ob_size * 4 + 2,params['size'], params['num'] )
 				self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
-				tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params['stride'])
+				self.bias_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n + '_bias')
+				conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
 
-			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [self.params.batch, 1, self.params.hidden_size]), axis=1)
-			self.U = tf.get_variable('U', shape=[self.params.hidden_size, self.params.actions])
-			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
-			self.predictions = tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32')
-			self.min_score = tf.reduce_min(self.predictions, reduction_indices=[1])
+				
 
 
 	def add_training_objective(self):
@@ -96,9 +99,9 @@ class Q_RNN:
 		self.batch_losses = tf.reduce_sum(tf.sqrt(tf.squared_difference(self.predictions, self.target_values)), axis=1)
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0) + tf.nn.l2_loss(self.U) + tf.nn.l2_loss(self.b_2)
 		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
-		self.gvs = self.trainer.compute_gradients(self.loss)
-		capped_gvs = [None if grad is None else (tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
-		self.updateWeights = self.trainer.apply_gradients(capped_gvs)
+		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
+		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
+		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
 
 	def copy_Q_Op(self, Q):
 		current_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope.name)
@@ -237,17 +240,18 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 					price_paid = tgt_price if diff == 0 else spent / diff
 					t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
 					backup[a] = (t_cost * diff + argmin * leftover)/(vol_unit * i) if i!=0 else 0
-					if np.isinf(argmin).any():
+					if np.isinf(argmin).any() or np.isinf(argmin).any():
 						import pdb
 						pbd.set_trace()
 					argmins[a] = argmin
 					t_costs[a] = t_cost
 				targ = backup.reshape(1, 11)
 				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
-				q_vals, loss, min_score, gradients, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.gvs, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
-				if np.isnan(q_vals).any() or np.isinf(q_vals).any():
+				q_vals, loss, min_score, gradients = sess.run((Q.predictions, Q.loss, Q.min_score, Q.clipped_gradients), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
+				if np.isnan(gradients).any() or np.isinf(gradients).any() or np.isnan(q_vals).any():
 					import pdb
 					pdb.set_trace()
+				q_vals, loss, min_score, gradients, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.clipped_gradients, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
 				if ts % 100 == 0:
 					sess.run(updateTargetOperation)
 					print ts
