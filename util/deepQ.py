@@ -41,10 +41,6 @@ class Q_CNN:
 				self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
 				tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params['stride'])
 
-
-			self.forward_cell_layers = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.LSTMCell(self.params.hidden_size) for i in range(self.params.hidden_depth)])
-			self.rnn_output, self.final_rnn_state = tf.nn.dynamic_rnn(self.forward_cell_layers, self.input_place_holder, \
-								sequence_length=[self.params.window]*self.params.batch, dtype=tf.float32)
 			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [self.params.batch, 1, self.params.hidden_size]), axis=1)
 			self.U = tf.get_variable('U', shape=[self.params.hidden_size, self.params.actions])
 			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
@@ -241,11 +237,17 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 					price_paid = tgt_price if diff == 0 else spent / diff
 					t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
 					backup[a] = (t_cost * diff + argmin * leftover)/(vol_unit * i) if i!=0 else 0
+					if np.isinf(argmin).any():
+						import pdb
+						pbd.set_trace()
 					argmins[a] = argmin
 					t_costs[a] = t_cost
 				targ = backup.reshape(1, 11)
 				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
-				q_vals, loss, min_score, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
+				q_vals, loss, min_score, gradients, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.gvs, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
+				if np.isnan(q_vals).any() or np.isinf(q_vals).any():
+					import pdb
+					pdb.set_trace()
 				if ts % 100 == 0:
 					sess.run(updateTargetOperation)
 					print ts
