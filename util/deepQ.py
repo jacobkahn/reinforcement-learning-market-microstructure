@@ -78,7 +78,8 @@ class Q_RNN:
 		self.name = name
 		self.params = params
 		self.build_model_graph()
-		self.add_training_objective()
+		if not target:
+			self.add_training_objective()
 
 	def build_model_graph(self): 
 		with tf.variable_scope(self.name) as self.scope:
@@ -89,7 +90,7 @@ class Q_RNN:
 			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [self.params.batch, 1, self.params.hidden_size]), axis=1)
 			self.U = tf.get_variable('U', shape=[self.params.hidden_size, self.params.actions])
 			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
-			self.predictions = tf.tanh(tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32')) 	
+			self.predictions = tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32') 
 			self.min_score = tf.reduce_min(self.predictions, reduction_indices=[1])
 			self.min_action = tf.argmin(tf.squeeze(self.predictions), axis=0, name="arg_min")
 
@@ -99,7 +100,9 @@ class Q_RNN:
 		self.batch_losses = tf.reduce_sum(tf.sqrt(tf.squared_difference(self.predictions, self.target_values)), axis=1)
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0) + tf.nn.l2_loss(self.U) + tf.nn.l2_loss(self.b_2)
 		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
-		self.updateWeights = self.trainer.minimize(self.loss)
+		self.gvs = self.trainer.compute_gradients(self.loss)
+		capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
+		self.updateWeights = self.trainer.apply_gradients(capped_gvs)
 
 	def copy_Q_Op(self, Q):
 		current_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope.name)
@@ -242,10 +245,7 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 					t_costs[a] = t_cost
 				targ = backup.reshape(1, 11)
 				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
-				q_vals, loss, min_score, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})
-				if np.isnan(q_vals).any():
-					import pdb
-					pdb.set_trace()
+				q_vals, loss, min_score, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
 				if ts % 100 == 0:
 					sess.run(updateTargetOperation)
 					print ts
@@ -275,8 +275,8 @@ def train_DQN(epochs, ob_file, H, V, I, T, L, debug=False):
 		sess.run(init)
 		sess.run(updateTargetOperation)
 		for i in range(1):
-			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S=1000)
-		executions = execute_algo(Q, sess, env, H, V, I, T, 100, 10000)
+			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S=2000)
+		executions = execute_algo(Q, sess, env, H, V, I, T, 100, 100000)
 		write_trades(executions)
 
 def write_function(function, T, L,functionFilename='deep Q'):
