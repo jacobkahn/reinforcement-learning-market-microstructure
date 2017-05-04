@@ -20,6 +20,11 @@ class Filters:
 	def __init__(self, filters):
 		self.f = filters
 
+def compute_pool_size(h, w, psize, stride, k):
+	W_2 = (w - psize)/stride + 1
+	H_2 = (h - psize)/stride + 1
+	return [W_2, H_2, key]
+
 def compute_outputsize(h, w, fsize, stride, padding, k):
 	W_2 = (w - fsize + 2 * padding)/ stride + 1
 	H_2 = (h - fsize + 2 * padding)/ stride + 1
@@ -39,6 +44,7 @@ class Q_CNN:
 		self.filter_tensors = {}
 		self.bias_tensors = {}
 		self.conv_layer_out = []
+		self.compute_pool_size
 		with tf.variable_scope(self.name) as self.scope:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
 			for fil, params in self.f.items():
@@ -46,9 +52,10 @@ class Q_CNN:
 				s = [params['size'], params['size'], 1, params['num']]
 				o_s = compute_outputsize(self.params.window, self.self.params.ob_size * 4 + 2,params['size'], params['stride'], 0, params['num'])
 				self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
-				self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[o_s], stddev=0.1), name=n + '_bias')
+				self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
 				conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
-				
+				h = tf.nn.relu(tf.nn.bias_add(conv_output, bias), name=n+'relu')
+				conv_layer_out.append(h)
 
 
 	def add_training_objective(self):
@@ -93,12 +100,11 @@ class Q_RNN:
 			self.min_score = tf.reduce_min(self.predictions, reduction_indices=[1])
 			self.min_action = tf.argmin(tf.squeeze(self.predictions), axis=0, name="arg_min")
 
-
 	def add_training_objective(self):
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
-		self.batch_losses = tf.reduce_sum(tf.sqrt(tf.squared_difference(self.predictions, self.target_values)), axis=1)
+		self.batch_losses = tf.reduce_sum(tf.squared_difference(self.predictions, self.target_values), axis=1)
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0) + tf.nn.l2_loss(self.U) + tf.nn.l2_loss(self.b_2)
-		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
+		self.trainer = tf.train.AdamOptimizer(learning_rate=0.00001)
 		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
 		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
 		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
