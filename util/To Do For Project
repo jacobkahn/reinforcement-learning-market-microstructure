@@ -1,5 +1,4 @@
 	To Do For Project
-		- fix exploding LSTM gradients
 		- implement CNN and CNN plus LSTM
 		- implement backups for DQN
 		- continue berkeley course, look at policy gradient methods

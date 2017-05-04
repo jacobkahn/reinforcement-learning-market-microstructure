@@ -25,7 +25,6 @@ class Q_Function:
 	def train_example(self, func, x, y):
 		x += 2
 		func.partial_fit(self.pre_process.fit_transform(x), y)
-		print self.backup['name'] + ' ' + str(x) + ' ' + str(y)
 
 	def predict(self, func, x):
 		x += 2

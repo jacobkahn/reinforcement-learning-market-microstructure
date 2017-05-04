@@ -155,7 +155,7 @@ def create_input_window_train(env, ts, window, batch, ob_size, t, i):
 		return window_vec
 
 
-def execute_algo(Q, session, env, H, V, I, T, S, steps):
+def execute_algo(Q, session, env, H, V, I, T, steps):
 	divs = 10
 	env.get_timesteps(0, S+1, I, V)
 	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
@@ -291,9 +291,9 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 				losses.append(loss)
 	print np.mean(losses)
 
-def train_DQN(epochs, ob_file, H, V, I, T, L, debug=False):
-	env = Environment(ob_file,setup=False)
-	params = Params(10, 10, 5, 1, L + 1, 1)
+def train_DQN(epochs, ob_file, H, V, I, T, L, S, test_steps, params, env=None, debug=False):
+	if env is None:
+		env = Environment(ob_file,setup=False)
 	Q = Q_RNN(params, 'original')
 	Q_target = Q_RNN(params, 'target', target=True)
 	updateTargetOperation = Q_target.copy_Q_Op(Q)
@@ -301,12 +301,12 @@ def train_DQN(epochs, ob_file, H, V, I, T, L, debug=False):
 	with tf.Session() as sess:
 		sess.run(init)
 		sess.run(updateTargetOperation)
-		for i in range(1):
-			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S=100)
-		executions = execute_algo(Q, sess, env, H, V, I, T, 100, 100000)
+		for i in range(epochs):
+			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S)
+		executions = execute_algo(Q, sess, env, H, V, I, T, test_steps)
 		write_trades(executions)
 
-def write_function(function, T, L,functionFilename='deep Q'):
+def write_function(function, T, L,functionFilename='deepQ'):
 	table_file = open(functionFilename + '.csv', 'wb')
 	tw = csv.writer(table_file)
 	table_rows = []	
@@ -326,6 +326,7 @@ def write_function(function, T, L,functionFilename='deep Q'):
 
 	
 if __name__ == "__main__":
-	train_DQN(30, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, debug=False)
+	params = Params(10, 10, 5, 1, L + 1, 1)
+	train_DQN(30, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, 100, 100000, params)
 
 	
