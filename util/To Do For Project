@@ -1,0 +1,14 @@
+	To Do For Project
+		- fix exploding LSTM gradients
+		- implement CNN and CNN plus LSTM
+		- implement backups for DQN
+		- continue berkeley course, look at policy gradient methods
+		- add time of day and day of week fields
+		- run experiments on data - compare table based methods vs regressions vs DLs
+		- try random forest regressor as well
+		- install tensorboard
+		- gradient clips by global norm
+		- write episode creator
+		- try DQN without dynamic programming
+		- extra noisy channels CNN
+		- batching

@@ -186,7 +186,6 @@ class Environment:
 class OrderBook:
 
 	def __init__(self, asks, ask_vols, bids, bid_vols):
-		#self.market_vol = 
 		self.a = {}
 		for i in range(len(asks)):
 			self.a[asks[i]] = ask_vols[i]
@@ -289,7 +288,7 @@ class OrderBook:
 		else:
 			print "Invalid side code - OrderBook.order"
 			return -2
-
+			
 	def vectorize_book(self, price_levels, time, inv):
 		ret = np.zeros(shape=[price_levels * 4 + 2])
 		row = 0

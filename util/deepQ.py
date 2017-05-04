@@ -37,6 +37,7 @@ class Q_CNN:
 		self.name = name
 		self.params = params
 		self.f = filters
+		self.pool = filters['pool']
 		self.build_model_graph()
 		self.add_training_objective()
 
@@ -44,7 +45,8 @@ class Q_CNN:
 		self.filter_tensors = {}
 		self.bias_tensors = {}
 		self.conv_layer_out = []
-		self.compute_pool_size
+		self.pool_out = []
+		p = self.pool
 		with tf.variable_scope(self.name) as self.scope:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
 			for fil, params in self.f.items():
@@ -56,6 +58,12 @@ class Q_CNN:
 				conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
 				h = tf.nn.relu(tf.nn.bias_add(conv_output, bias), name=n+'relu')
 				conv_layer_out.append(h)
+			for conv in conv_layer_out:
+				out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1])
+				pool_out.append(out)
+			final_layer = tf.squeeze(tf.concatenate(pool_out, 3))
+
+
 
 
 	def add_training_objective(self):
@@ -103,8 +111,8 @@ class Q_RNN:
 	def add_training_objective(self):
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
 		self.batch_losses = tf.reduce_sum(tf.squared_difference(self.predictions, self.target_values), axis=1)
-		self.loss = tf.reduce_sum(self.batch_losses, axis=0) + tf.nn.l2_loss(self.U) + tf.nn.l2_loss(self.b_2)
-		self.trainer = tf.train.AdamOptimizer(learning_rate=0.00001)
+		self.loss = tf.reduce_sum(self.batch_losses, axis=0)
+		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
 		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
 		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
 		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
@@ -236,6 +244,7 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 					if t == T:
 						spent += leftover * actions[-2]
 						argmin = 0
+						leftover = 0
 					else: 
 						rounded_unit = int(round(1.0 * leftover / vol_unit))
 						next_book_vec = create_input_window_train(env, ts + time_unit, window, 1, ob_size, t + 1, rounded_unit)
@@ -266,11 +275,12 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 				if ts % 100 == 0:
 					sess.run(updateTargetOperation)
 					print ts
-				if ts % 1000 == 0:
-					print 'input'
-					print book_vec
+				if ts % 100 == 0:
+					#print 'input'
+					#print book_vec
 					print 'Q'
 					print q_vals
+					print str(t) + ',' + str(i)
 					print 'targ'
 					print targ
 					print 'arg min'
@@ -292,7 +302,7 @@ def train_DQN(epochs, ob_file, H, V, I, T, L, debug=False):
 		sess.run(init)
 		sess.run(updateTargetOperation)
 		for i in range(1):
-			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S=2000)
+			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S=100)
 		executions = execute_algo(Q, sess, env, H, V, I, T, 100, 100000)
 		write_trades(executions)
 
