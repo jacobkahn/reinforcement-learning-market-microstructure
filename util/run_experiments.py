@@ -29,7 +29,7 @@ if __name__ == "__main__":
 	H = 2500
 	T = 10 
 	I = 10
-	S = 1000 
+	S = 10000
 	L = 10
 	window = 10
 	ob_size = L
@@ -37,9 +37,9 @@ if __name__ == "__main__":
 	depth = 3
 	actions = L + 1
 	batch = 1
-	epochs = 5
+	epochs = 3
 	rnn_params = Params(window, ob_size, hidden_size, depth, actions, batch)
-	test_steps = 10000
+	test_steps = 100000
 	divs = 10
 
 	environment = Environment(ob_file, setup=False)
