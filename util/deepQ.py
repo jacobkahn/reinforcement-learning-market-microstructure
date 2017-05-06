@@ -382,7 +382,7 @@ def train_DQN(epochs, ob_file, H, V, I, T, L, S, test_steps, params, env=None, d
 		sess.run(init)
 		sess.run(updateTargetOperation)
 		for i in range(epochs):
-			run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S)
+			run_continuos_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S)
 		executions = execute_algo(Q, sess, env, H, V, I, T, test_steps, S)
 		write_trades(executions)
 
@@ -407,6 +407,6 @@ def write_function(function, T, L,functionFilename='deepQ'):
 	
 if __name__ == "__main__":
 	params = Params(10, 10, 5, 1, 11, 1)
-	train_DQN(1, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, 1, 100000, params)
+	train_DQN(1, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, 10, 100000, params)
 
 	
