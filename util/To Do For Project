@@ -11,3 +11,4 @@
 		- try DQN without dynamic programming
 		- extra noisy channels CNN
 		- batching
+		- latent space learning with autoencoder

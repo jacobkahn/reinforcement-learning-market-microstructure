@@ -24,17 +24,17 @@ if __name__ == "__main__":
 					'buff_size': 50,
 					'replays': 5
 	}
-	ob_file = "../data/10_GOOG.csv"
+	ob_file = "../../test_AAPL_ob.csv"
 	V = 2500
 	H = 2500
 	T = 10 
 	I = 10
 	S = 10000
-	L = 10
+	L = 5
 	window = 10
 	ob_size = L
 	hidden_size = 5
-	depth = 3
+	depth = 2
 	actions = L + 1
 	batch = 1
 	epochs = 3
