@@ -1,0 +1,16 @@
+	To Do For Project
+		- implement CNN - 1
+		- implement backups for DQN - 2
+		
+		- run experiments on data - compare table based methods vs regressions vs DLs - 4
+		- try random forest regressor as well - 5
+		- install tensorboard
+
+		- write episode creator
+		- try DQN without dynamic programming
+		- batching
+
+
+		- latent space learning with autoencoder
+		- continue berkeley course, look at policy gradient methods 
+		- add time of day and day of week fields
