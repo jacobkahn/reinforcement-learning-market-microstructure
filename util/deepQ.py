@@ -30,6 +30,10 @@ def compute_outputsize(h, w, fsize, stride, padding, k):
 	H_2 = (h - fsize + 2 * padding)/ stride + 1
 	return [W_2, H_2, k]
 
+# to do: policy clipped_gradients
+#class A3C:
+
+
 
 class Q_CNN: 
 
@@ -47,21 +51,24 @@ class Q_CNN:
 		self.conv_layer_out = []
 		self.pool_out = []
 		p = self.pool
+		# lots to decisions
 		with tf.variable_scope(self.name) as self.scope:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
-			for fil, params in self.f.items():
-				n = 'filter_size_{}_stride_{}_num_{}'.format(params['size'], params['stride'], params['num'])
-				s = [params['size'], params['size'], 1, params['num']]
-				o_s = compute_outputsize(self.params.window, self.params.ob_size * 4 + 2,params['size'], params['stride'], 0, params['num'])
-				self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
-				self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
-				conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
-				h = tf.nn.relu(tf.nn.bias_add(conv_output, bias), name=n+'relu')
-				conv_layer_out.append(h)
-			for conv in conv_layer_out:
-				out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
-				pool_out.append(out)
-			self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
+			for name, layer in self.f.items():
+				for fil, params in l.items():
+					n = '{}_filter_size_{}_stride_{}_num_{}'.format(name, params['size'], params['stride'], params['num'])
+					s = [params['size'], params['size'], 1, params['num']]
+					o_s = compute_outputsize(self.params.window, self.params.ob_size * 4 + 2,params['size'], params['stride'], 0, params['num'])
+					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
+					self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
+					conv_output = tf.nn.conv2d(self.input_place_ho
+						lder, self.filter_tensors[name], params, "VALID")
+					h = tf.nn.relu(tf.nn.bias_add(conv_output, bias), name=n+'relu')
+					conv_layer_out.append(h)
+				for conv in conv_layer_out:
+					out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
+					pool_out.append(out)
+				self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
 
 	def add_training_objective(self):
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
@@ -88,7 +95,7 @@ class Q_RNN:
 	def __init__(self, params, name, target=False):
 		self.name = name
 		self.params = params
-		self.build_model_graph()
+		self.build_model_graph()	
 		if not target:
 			self.add_training_objective()
 
@@ -150,9 +157,11 @@ def create_input_window_train(env, ts, window, batch, ob_size, t, i):
 		return window_vec
 
 
+
+
 def execute_algo(Q, session, env, H, V, I, T, steps, S):
 	divs = 10
-	env.get_timesteps(0, S+1, I, V)
+	env.get_timesteps(1, S+2, I, V)
 	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
 	window = Q.params.window
 	ob_size = Q.params.ob_size
@@ -216,73 +225,77 @@ def write_trades(executions, tradesOutputFilename="DQN"):
 	w.writerows(executions)
 
 
+def generate_transition(env, state, action, Q, Q_targ):
+	vol_unit = state['v']
+	i = state['i']
+	spent, leftover = env.limit_order(0, action, vol_unit * i)
+	if t == T:
+		spent += leftover * actions[-2]
+		argmin = 0
+		leftover = 0
+
+
+def backup(s, a, r, ns, Q, Q_targ, Q2, backup):
+	curr_book = env.get_book(ts)
+	tgt_price = env.mid_spread(ts + time_unit * (T- t))
+	actions = sorted(curr_book.a.keys())
+	actions.append(0)
+	backup = np.zeros(shape=[L+1])
+	argmins = np.zeros(shape=[L+1])
+	t_costs = np.zeros(shape=[L+1])
+	for a in range(L+1):
+		curr_book = env.get_book(ts)
+		limit_price = float("inf") if t == T else actions[a]
+		spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
+		if t == T:
+			spent += leftover * actions[-2]
+			argmin = 0
+			leftover = 0
+		else: 
+			left = (1.0 * leftover / H)
+			next_book_vec = create_input_window_train(env, ts + time_unit, window, 1, ob_size, t + 1, left)
+			next_scores, argmin = sess.run((Q_target.predictions, Q_target.min_score), feed_dict={
+											Q_target.input_place_holder: next_book_vec
+										})
+		diff = vol_unit * i - leftover
+		price_paid = tgt_price if diff == 0 else spent / diff
+		t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
+		backup[a] = (t_cost * diff + argmin * leftover)/(vol_unit * i) if i!=0 else 0
+		if np.isinf(argmin).any() or np.isinf(argmin).any():
+			import pdb
+			pbd.set_trace()
+		argmins[a] = argmin
+		t_costs[a] = t_cost
+	targ = backup.reshape(1, L + 1)
+	book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, (1.0 * i * vol_unit) / H)
+	if ts % 100 == 0:
+		sess.run(updateTargetOperation)
+		print ts
+	if ts % 100 == 0:
+		#print 'input'
+		#print book_vec
+		print str(t) + ',' + str(i)	
+		print 'Q'
+		print q_vals
+		print 'targ'
+		print targ
+		print 'arg min'
+		print argmins
+		print 't cost'
+		print t_costs	
+		print np.mean(losses)
+	print 'hi'
+
 def run_continuos_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 	ob_size = Q.params.ob_size
 	window = Q.params.window
 	losses = []
 	vol_unit = V / I
-	time_unit = H / T
+	time_unit = H / T	
 	for t in range(T+1)[::-1]:
 		for i in range(I+1):
 			for ts in range(1, S+1):
-				curr_book = env.get_book(ts)
-				tgt_price = env.mid_spread(ts)
-				actions = sorted(curr_book.a.keys())
-				actions.append(0)
-				backup = np.zeros(shape=[L+1])
-				argmins = np.zeros(shape=[L+1])
-				t_costs = np.zeros(shape=[L+1])
-				for a in range(L+1):
-					curr_book = env.get_book(ts)
-					limit_price = float("inf") if t == T else actions[a]
-					spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
-					if t == T:
-						spent += leftover * actions[-2]
-						argmin = 0
-						leftover = 0
-					else: 
-						left = (1.0 * leftover / H)
-						next_book_vec = create_input_window_train(env, ts + time_unit, window, 1, ob_size, t + 1, left)
-						next_scores, argmin = sess.run((Q_target.predictions, Q_target.min_score), feed_dict={
-														Q_target.input_place_holder: next_book_vec
-													})
-					diff = vol_unit * i - leftover
-					price_paid = tgt_price if diff == 0 else spent / diff
-					t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
-					backup[a] = (t_cost * diff + argmin * leftover)/(vol_unit * i) if i!=0 else 0
-					if np.isinf(argmin).any() or np.isinf(argmin).any():
-						import pdb
-						pbd.set_trace()
-					argmins[a] = argmin
-					t_costs[a] = t_cost
-				targ = backup.reshape(1, 11)
-				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, (1.0 * i * vol_unit) / H)
-				q_vals, loss, min_score, gradients = sess.run((Q.predictions, Q.loss, Q.min_score, Q.gvs), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
-				gradient_nan = False
-				for g in gradients:
-					if np.isnan(g).any() or np.isinf(g).any():
-						gradient_nan = True
-						break
-				if gradient_nan or np.isnan(q_vals).any():
-					import pdb
-					pdb.set_trace()
-				q_vals, loss, min_score, gradients, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.clipped_gradients, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
-				if ts % 100 == 0:
-					sess.run(updateTargetOperation)
-					print ts
-				if ts % 100 == 0:
-					#print 'input'
-					#print book_vec
-					print str(t) + ',' + str(i)	
-					print 'Q'
-					print q_vals
-					print 'targ'
-					print targ
-					print 'arg min'
-					print argmins
-					print 't cost'
-					print t_costs	
-					print np.mean(losses)
+				
 				losses.append(loss)
 	print np.mean(losses)
 
@@ -300,7 +313,7 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 		for i in range(I+1):
 			for ts in range(1, S+1):
 				curr_book = env.get_book(ts)
-				tgt_price = env.mid_spread(ts)
+				tgt_price = env.mid_spread(ts + time_unit * (T- t))
 				actions = sorted(curr_book.a.keys())
 				actions.append(0)
 				backup = np.zeros(shape=[L+1])
@@ -329,7 +342,7 @@ def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 						pbd.set_trace()
 					argmins[a] = argmin
 					t_costs[a] = t_cost
-				targ = backup.reshape(1, 11)
+				targ = backup.reshape(1, L + 1)
 				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
 				q_vals, loss, min_score, gradients = sess.run((Q.predictions, Q.loss, Q.min_score, Q.gvs), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
 				gradient_nan = False
@@ -407,6 +420,6 @@ def write_function(function, T, L,functionFilename='deepQ'):
 	
 if __name__ == "__main__":
 	params = Params(10, 10, 5, 1, 11, 1)
-	train_DQN(1, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, 10, 100000, params)
+	train_DQN(1, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, 1000, 100000, params)
 
 	
