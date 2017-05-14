@@ -38,9 +38,29 @@ if __name__ == "__main__":
 	actions = L + 1
 	batch = 1
 	epochs = 3
+	continuous = True
+	stateful = True
 	rnn_params = Params(window, ob_size, hidden_size, depth, actions, batch)
 	test_steps = 100000
 	divs = 10
+	params = {
+		'window': window,
+		'ob_size': ob_size,
+		'hidden_size': hidden_size, 
+		'depth': depth, 
+		'actions': actions, 
+		'batch': batch,
+		'continuous': continuous,
+		'stateful': stateful,
+		'H': H, 
+		'V': V,
+		'T': T,
+		'I': I,
+		'T': T,
+		'S': S,
+		'L': L
+	}
+
 
 	environment = Environment(ob_file, setup=False)
 

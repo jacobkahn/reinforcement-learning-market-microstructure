@@ -1,18 +1,19 @@
 	To Do For Project
 
-		- implement CNN - Amit
-		- implement backups for DQN - Amit
+		- implement CNN - Amit(tomorrow)
+		- implement backups for DQN - Amit(tomorrow) - done
+		- advantage network/ dueling net(Amit)
 		
 		- add time of day and day of week fields - Jacob
-		- new environment class for mulitple assets - Jacob
+		- new class for mulitple assets - Jacob
 		- run experiments on data - compare table based methods and regressions on new data - Jacob 
 		- try random forest regressor as well - Jacob
 
 
 		- install tensorboard - Amit and Jacob
-		- write episode creator - Amit
-		- try DQN without dynamic programming - Amit
-		- batching - Amit
+		- write episode creator - Amit(tomorrow) - done
+		- try DQN without dynamic programming - Amit(tomorrow) - almost done
+		- batching - Amit(tomorrow) - done
 
 
 		- latent space learning with autoencoder

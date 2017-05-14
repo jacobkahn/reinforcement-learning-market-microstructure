@@ -1,6 +1,7 @@
 from environment import *
 from agent import *
 from collections import defaultdict
+from random import shuffle
 import tensorflow as tf 
 import numpy as np
 import csv
@@ -14,7 +15,6 @@ class Params:
 		self.hidden_depth = depth
 		self.actions = actions
 		self.batch = batch
-
 
 class Filters:
 	def __init__(self, filters):
@@ -30,20 +30,197 @@ def compute_outputsize(h, w, fsize, stride, padding, k):
 	H_2 = (h - fsize + 2 * padding)/ stride + 1
 	return [W_2, H_2, k]
 
-# to do: policy clipped_gradients
-#class A3C:
+
+class Q_Approx:
+	def __init__(self, params):
+		self.params = params
+		b = params['backup']
+		a = params['network']
+		self.inp_buff = []
+		self.targ_buff = []
+		self.batchs = []
+		self.input_batch = None
+		self.targ_batch = None
+		if b == 'replay_buffer' or b == 'sampling':
+			self.Q = self.create_network(a, params, 'Q')
+			self.Q_target = self.create_network(a, params, 'Q_target')
+			self.buff = []
+			self.updateTargetOperation = Q_target.copy_Q_Op(Q)
+		elif b == 'dueling net':
+			self.Q = self.create_network(a, params, 'Q')
+			self.V = self.create_network(a, params, 'V')
+		elif b == 'doubleQ':
+			self.Q_1 = self.create_network(a, params, 'Q_1')
+			self.Q_2 = self.create_network(a, params, 'Q_2')
+		self.choose_backup_networks()
+
+
+	def create_network(self, arch, params, name):
+		if self.params['backup'] == 'replay_buffer':
+			self.replay = []
+		if arch == 'CNN':
+			return Q_CNN(params,  name)
+		elif arch == 'RNN':
+			return Q_RNN(params, name)
+		else:
+			print 'Illegal Architecture type!'
+			return None
+
+	def backup(self, sess, inp, targ):
+		b = self.params['backup']
+		if b == 'sampling':
+			print 'hi'
+		elif b == 'replay_buffer':
+			self.Q = self.create_network(a, params, 'Q')
+			self.Q_target = self.create_network(a, params, 'Q_target')
+			self.updateTargetOperation = Q_target.copy_Q_Op(Q)
+		elif b == 'dueling net':
+			self.Q = self.create_network(a, params, 'Q')
+			self.V = self.create_network(a, params, 'V')
+		elif b == 'doubleQ':
+			self.Q_1 = self.create_network(a, params, 'Q_1')
+			self.Q_2 = self.create_network(a, params, 'Q_2')
+
+
+	def choose_backup_networks(self):
+		b = self.params['backup']
+		if b == 'replay_buffer' or b == 'sampling':
+			self.target = self.Q_target
+			self.fit = self.Q
+		elif b == 'dueling net':
+			print 'hi'
+		elif b == 'doubleQ':
+			Q_tables = [self.Q_1, self.Q_2]	
+			shuffle(Q_tables)
+			self.target = Q_tables[0]
+			self.fit = Q_tables[1]
+
+
+	def batch_ready(self):
+		return ((self.input_batch != None) and (self.targ_batch != None))
+
+	def update_networks(self, sess):
+		Q = self.fit
+		q_vals, loss, min_score, gradients = sess.run(
+				(Q.predictions, Q.loss, Q.min_score, Q.gvs), 
+				feed_dict={Q.input_place_holder: input, Q.target_values: targ})
+		self.input_batch = None
+		self.targ_batch = None
+		return q_vals, loss, min_score, gradients		
+
+	def calculate_target(self, sess, env, state, action, length, use_Q=None, reset=True):
+		if use_Q is None:
+			use_Q = self.target
+		b = self.params['backup']
+		i = state['i']
+		t = state['t']
+		ts = state['ts']
+		ob_size = self.params['ob_size']
+		window = self.params['window']
+		batch = self.params['batch']
+		stateful = self.params['stateful']
+		continuous = self.params['continuous']
+		time_unit = self.params['H']/self.params['T']
+		vol_unit = self.params['V'] / self.params['I']
+
+		if ts % 100 == 0 and b == 'sampling':
+			sess.run(self.updateTargetOperation)
+		
+		backup = 0
+		curr_action = action
+		tgt_price = env.mid_spread(ts + time_unit * (self.params['T']- t))
+		leftover = vol_unit * i
+
+		states = []
+		rewards = []
+
+		if reset:
+			if params['stateful']:
+				env.get_timesteps(sample, sample + time_unit*length+ 1, i, i*vol_unit)
+			s = create_input_window_stateless(env, ts, window, ob_size, t, i)
+			states.append(s)
+		# rollout bellman operator for multiple action steps
+		for idx in range(length):
+			# draw out current state and limit price
+			old_leftover = leftover
+			if stateful:
+				curr_book = env.curr_book
+			else: 
+				curr_book = env.get_book(ts + idx*time_unit)
+			actions = sorted(curr_book.a.keys())
+			actions.append(0)
+			limit_price = float("inf") if t == T else actions[a]
+
+			# execute
+			spent, leftover = env.limit_order(0, limit_price, leftover)
+			if t >= T:
+				spent += leftover * actions[-2]
+				argmin = 0
+				leftover = 0
+			else:
+				left = (1.0 * leftover / self.params['V']) if continuous else int(round(leftover / vol_unit))
+				if stateful:
+					next_book_vec = create_input_window_stateful(env, window, ob_size, t + 1, left, time_unit)
+				else: 
+					next_book_vec = create_input_window_stateless(env, ts + time_unit, window, ob_size, t + 1, left)
+					next_scores, argmin, action = sess.run((use_Q.predictions, use_Q.min_score, use_Q.min_action), feed_dict={
+												use_Q.input_place_holder: next_book_vec
+									  })
+				states.append(next_book_vec)
+			# update state and record value of transaction
+			t += 1
+			ts = ts + time_unit
+			diff = old_leftover - leftover
+			price_paid = tgt_price if diff == 0 else spent / diff
+			t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
+			backup += t_cost * diff if i!=0 else 0
+			rewards.append([t_cost, diff])
+		backup += leftover * argmin
+		backup = (1.0* backup)/ (vol_unit*i)
+		rewards.append([argmin, leftover])
+		return backup, states, rewards
+
+
+	def submit_to_batch(self, inp, target):
+		self.inp_buff.append(inp)
+		self.targ_buff.append(target)
+		if self.params['backup'] == 'replay_buffer':
+			self.replay.append((inp, target))
+			if len(self.replay) > self.params['replay_size']:
+				self.replay.pop(0)
+			for idx in range(self.params['replays'] - 1):
+				if len(self.inp_buff) == self.params['batch']:
+					self.input_batch = np.concatenate(self.inp_buff, axis=0)
+					self.targ_batch = np.concatenate(self.targ_buff, axis=0)
+					self.inp_buff = []
+					self.targ_buff = []
+				inp, target = random.choice(self.replay)
+				self.inp_buff.append(inp)
+				self.targ_buff.append(target)
+		else:
+			if len(self.inp_buff) == self.params['batch']:
+				self.input_batch = np.concatenate(self.inp_buff, axis=0)
+				self.targ_batch = np.concatenate(self.targ_buff, axis=0)
+				self.inp_buff = []
+				self.targ_buff = []
+				return True
+		return False
+
+# to do: policy gradients
+# class A3C:
 
 
 
 class Q_CNN: 
 
-	def __init__(self, params, name, filters, target=False):
+	def __init__(self, params, name):
 		self.name = name
-		self.params = params
-		self.f = filters
-		self.pool = filters['pool']
+		self.params = Params(params['window'], params['ob_size'], params['hidden_size'], params['depth'], params['actions'], params['batch'])
+		self.f = params['filters']
+		self.pool = self.f['pool']
 		self.build_model_graph()
-		self.add_training_objective()
+		if not target:
+			self.add_training_objective()
 
 	def build_model_graph(self):
 		self.filter_tensors = {}
@@ -61,8 +238,7 @@ class Q_CNN:
 					o_s = compute_outputsize(self.params.window, self.params.ob_size * 4 + 2,params['size'], params['stride'], 0, params['num'])
 					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
 					self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
-					conv_output = tf.nn.conv2d(self.input_place_ho
-						lder, self.filter_tensors[name], params, "VALID")
+					conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
 					h = tf.nn.relu(tf.nn.bias_add(conv_output, bias), name=n+'relu')
 					conv_layer_out.append(h)
 				for conv in conv_layer_out:
@@ -88,16 +264,12 @@ class Q_CNN:
 		return copy_operation
 
 
-
-
 class Q_RNN: 
 
-	def __init__(self, params, name, target=False):
+	def __init__(self, params, name):
 		self.name = name
-		self.params = params
+		self.params = Params(params['window'], params['ob_size'], params['hidden_size'], params['depth'], params['actions'], params['batch'])
 		self.build_model_graph()	
-		if not target:
-			self.add_training_objective()
 
 	def build_model_graph(self): 
 		with tf.variable_scope(self.name) as self.scope:
@@ -145,9 +317,9 @@ def create_input_window_test(env, window, ob_size, t, i):
 	return window_vec
 
 
-def create_input_window_train(env, ts, window, batch, ob_size, t, i):
+def create_input_window_stateless(env, ts, window, ob_size, t, i):
 	if(ts < window - 1):
-		return np.zeros(shape=[batch, window, ob_size * 4 + 2])
+		return np.zeros(shape=[1, window, ob_size * 4 + 2])
 	else:
 		vecs = []
 		for idx in range(ts - window + 1, ts + 1):
@@ -156,6 +328,19 @@ def create_input_window_train(env, ts, window, batch, ob_size, t, i):
 		window_vec = np.concatenate(vecs, axis=1)
 		return window_vec
 
+def create_input_window_stateful(env, window, ob_size, t, i, time_unit):
+	if(ts < window - 1):
+		return np.zeros(shape=[1, window, ob_size * 4 + 2])
+	else:
+		vecs = []
+		# wind forward to the window
+		for i in range(0, time_unit - window):
+			env.get_next_state()
+		for idx in range(0, window):
+			book_vec = env.get_next_state().vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
+			vecs.append(book_vec)
+		window_vec = np.concatenate(vecs, axis=1)
+		return window_vec
 
 
 
@@ -225,155 +410,66 @@ def write_trades(executions, tradesOutputFilename="DQN"):
 	w.writerows(executions)
 
 
-def generate_transition(env, state, action, Q, Q_targ):
-	vol_unit = state['v']
-	i = state['i']
-	spent, leftover = env.limit_order(0, action, vol_unit * i)
-	if t == T:
-		spent += leftover * actions[-2]
-		argmin = 0
-		leftover = 0
-
-
-def backup(s, a, r, ns, Q, Q_targ, Q2, backup):
-	curr_book = env.get_book(ts)
-	tgt_price = env.mid_spread(ts + time_unit * (T- t))
-	actions = sorted(curr_book.a.keys())
-	actions.append(0)
-	backup = np.zeros(shape=[L+1])
-	argmins = np.zeros(shape=[L+1])
-	t_costs = np.zeros(shape=[L+1])
-	for a in range(L+1):
-		curr_book = env.get_book(ts)
-		limit_price = float("inf") if t == T else actions[a]
-		spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
-		if t == T:
-			spent += leftover * actions[-2]
-			argmin = 0
-			leftover = 0
-		else: 
-			left = (1.0 * leftover / H)
-			next_book_vec = create_input_window_train(env, ts + time_unit, window, 1, ob_size, t + 1, left)
-			next_scores, argmin = sess.run((Q_target.predictions, Q_target.min_score), feed_dict={
-											Q_target.input_place_holder: next_book_vec
-										})
-		diff = vol_unit * i - leftover
-		price_paid = tgt_price if diff == 0 else spent / diff
-		t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
-		backup[a] = (t_cost * diff + argmin * leftover)/(vol_unit * i) if i!=0 else 0
-		if np.isinf(argmin).any() or np.isinf(argmin).any():
-			import pdb
-			pbd.set_trace()
-		argmins[a] = argmin
-		t_costs[a] = t_cost
-	targ = backup.reshape(1, L + 1)
-	book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, (1.0 * i * vol_unit) / H)
-	if ts % 100 == 0:
-		sess.run(updateTargetOperation)
-		print ts
-	if ts % 100 == 0:
-		#print 'input'
-		#print book_vec
-		print str(t) + ',' + str(i)	
-		print 'Q'
-		print q_vals
-		print 'targ'
-		print targ
-		print 'arg min'
-		print argmins
-		print 't cost'
-		print t_costs	
-		print np.mean(losses)
-	print 'hi'
-
-def run_continuos_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
-	ob_size = Q.params.ob_size
-	window = Q.params.window
-	losses = []
-	vol_unit = V / I
-	time_unit = H / T	
-	for t in range(T+1)[::-1]:
-		for i in range(I+1):
-			for ts in range(1, S+1):
-				
-				losses.append(loss)
-	print np.mean(losses)
-
 
 def run_advantage_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
 	print 'hi'
 
-def run_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
-	ob_size = Q.params.ob_size
-	window = Q.params.window
+def run_sampling_DQN():
+	print 'hi'
+
+def run_dp(sess, env, agent, params):
+	ob_size = params['ob_size']
+	window = params['window']
+	H = params['H']
+	V = params['V']
+	I = params['I']
+	T = params['T']
+	L = params['L']
+	S = params['S']
+	length = params['length']
 	losses = []
 	vol_unit = V / I
 	time_unit = H / T
+	agent.choose_backup_networks()
+	order_books = len(env.books)
 	for t in range(T+1)[::-1]:
 		for i in range(I+1):
 			for ts in range(1, S+1):
-				curr_book = env.get_book(ts)
-				tgt_price = env.mid_spread(ts + time_unit * (T- t))
-				actions = sorted(curr_book.a.keys())
-				actions.append(0)
+				sample = random.randint(0, order_books - (length * (time_unit + 1)))
 				backup = np.zeros(shape=[L+1])
 				argmins = np.zeros(shape=[L+1])
-				t_costs = np.zeros(shape=[L+1])
+				t_costs = []
 				for a in range(L+1):
-					curr_book = env.get_book(ts)
-					limit_price = float("inf") if t == T else actions[a]
-					spent, leftover = env.limit_order(0, limit_price, vol_unit * i)
-					if t == T:
-						spent += leftover * actions[-2]
-						argmin = 0
-						leftover = 0
-					else: 
-						rounded_unit = int(round(1.0 * leftover / vol_unit))
-						next_book_vec = create_input_window_train(env, ts + time_unit, window, 1, ob_size, t + 1, rounded_unit)
-						next_scores, argmin = sess.run((Q_target.predictions, Q_target.min_score), feed_dict={
-														Q_target.input_place_holder: next_book_vec
-													})
-					diff = vol_unit * i - leftover
-					price_paid = tgt_price if diff == 0 else spent / diff
-					t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
-					backup[a] = (t_cost * diff + argmin * leftover)/(vol_unit * i) if i!=0 else 0
-					if np.isinf(argmin).any() or np.isinf(argmin).any():
-						import pdb
-						pbd.set_trace()
-					argmins[a] = argmin
-					t_costs[a] = t_cost
+					state['i'] = i
+					state['t'] = t
+					state['ts'] = sample 
+					backup[a], states, t_costs[a] = agent.calculate_target(self, sess, env, agent.target, state, a, length)
+				inp = states[0]
 				targ = backup.reshape(1, L + 1)
-				book_vec = create_input_window_train(env, ts, window, 1, ob_size, t, i)
-				q_vals, loss, min_score, gradients = sess.run((Q.predictions, Q.loss, Q.min_score, Q.gvs), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
-				gradient_nan = False
-				for g in gradients:
-					if np.isnan(g).any() or np.isinf(g).any():
-						gradient_nan = True
-						break
-				if gradient_nan or np.isnan(q_vals).any():
-					import pdb
-					pdb.set_trace()
-				q_vals, loss, min_score, gradients, _ = sess.run((Q.predictions, Q.loss, Q.min_score, Q.clipped_gradients, Q.updateWeights), feed_dict={Q.input_place_holder: book_vec, Q.target_values: targ})	
-				if ts % 100 == 0:
-					sess.run(updateTargetOperation)
+				agent.submit_to_batch(inp, targ)
+				if agent.batch_ready():
+					b_in = agent.input_batch
+					b_targ = agent.targ_batch
+					q_vals, loss, min_score, gradients = agent.update_networks(sess)
+					agent.choose_backup_networks()
+					losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
+					print_stuff(q_vals, loss, b_in, b_targ)
+				if ts % 1000 == 0:
 					print ts
-				if ts % 100 == 0:
-					#print 'input'
-					#print book_vec
-					print str(t) + ',' + str(i)	
-					print 'Q'
-					print q_vals
-					print 'targ'
-					print targ
-					print 'arg min'
-					print argmins
-					print 't cost'
-					print t_costs	
-					print np.mean(losses)
-				losses.append(loss)
-	print np.mean(losses)
+	print 'Epoch Over'
 
-def train_DQN(epochs, ob_file, H, V, I, T, L, S, test_steps, params, env=None, debug=False):
+def print_stuff(q_vals, loss, inputs, targets):
+	print 'inputs'
+	print inputs
+	print 'Q'
+	print q_vals
+	print 'targets'
+	print targets
+	print 'loss'
+	print np.mean(loss)
+
+
+def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 	if env is None:
 		env = Environment(ob_file,setup=False)
 	filters = {
@@ -387,39 +483,42 @@ def train_DQN(epochs, ob_file, H, V, I, T, L, S, test_steps, params, env=None, d
 			'size': 5
 		}
 	}
-	Q = Q_RNN(params, 'original')
-	Q_target = Q_RNN(params, 'target', target=True)
-	updateTargetOperation = Q_target.copy_Q_Op(Q)
+	agent = Q_Approx(params) 
 	init = tf.initialize_all_variables()
 	with tf.Session() as sess:
 		sess.run(init)
-		sess.run(updateTargetOperation)
+		if params['backup'] == 'sampling':
+			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_continuos_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S)
-		executions = execute_algo(Q, sess, env, H, V, I, T, test_steps, S)
+			run_dp(sess, env, agent, params)
+		executions = execute_algo(sess, env, agent, test_steps, S)
 		write_trades(executions)
-
-def write_function(function, T, L,functionFilename='deepQ'):
-	table_file = open(functionFilename + '.csv', 'wb')
-	tw = csv.writer(table_file)
-	table_rows = []	
-	table_rows.append(['Time Left', 'Rounded Units Left', 'Action', 'Expected Payout'])
-	if type(function) is list:
-		table_rows.append(function[0].coef_)
-		table_rows.append(function[1].coef_)
-		table_rows.append(function[0].intercept_)
-		table_rows.append(function[1].intercept_)
-	else:
-		table_rows.append(function.coef_)
-		table_rows.append(function.intercept_)
-	tw.writerows(table_rows)
 
 
 	
 
 	
 if __name__ == "__main__":
-	params = Params(10, 10, 5, 1, 11, 1)
-	train_DQN(1, '../data/10_GOOG.csv', 1000, 1000, 10, 10, 10, 1000, 100000, params)
+	params = {
+		'backup': 'sampling',
+		'network': 'CNN',
+		'window': 10,
+		'ob_size': 10,
+		'hidden_size': 15, 
+		'depth': 2, 
+		'actions': 11, 
+		'batch': 1,
+		'continuous': True,
+		'stateful': True,
+		'rollout': 1,
+		'H': 1000, 
+		'V': 1000,
+		'T': 10,
+		'I': 10,
+		'T': 10,
+		'L': 10
+		'S': 1000
+	}
+	train_DQN_DP(1, '../data/10_GOOG.csv', params, 100000)
 
 	
