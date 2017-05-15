@@ -20,15 +20,7 @@ class Filters:
 	def __init__(self, filters):
 		self.f = filters
 
-def compute_pool_size(h, w, psize, stride, k):
-	W_2 = (w - psize)/stride + 1
-	H_2 = (h - psize)/stride + 1
-	return [W_2, H_2, key]
 
-def compute_outputsize(h, w, fsize, stride, padding, k):
-	W_2 = (w - fsize + 2 * padding)/ stride + 1
-	H_2 = (h - fsize + 2 * padding)/ stride + 1
-	return [W_2, H_2, k]
 
 
 class Q_Approx:
@@ -45,7 +37,7 @@ class Q_Approx:
 			self.Q = self.create_network(a, params, 'Q')
 			self.Q_target = self.create_network(a, params, 'Q_target')
 			self.buff = []
-			self.updateTargetOperation = Q_target.copy_Q_Op(Q)
+			self.updateTargetOperation = self.Q_target.copy_Q_Op(self.Q)
 		elif b == 'dueling net':
 			self.Q = self.create_network(a, params, 'Q')
 			self.V = self.create_network(a, params, 'V')
@@ -101,9 +93,11 @@ class Q_Approx:
 
 	def update_networks(self, sess):
 		Q = self.fit
+		inp = self.input_batch
+		targ = self.targ_batch
 		q_vals, loss, min_score, gradients = sess.run(
 				(Q.predictions, Q.loss, Q.min_score, Q.gvs), 
-				feed_dict={Q.input_place_holder: input, Q.target_values: targ})
+				feed_dict={Q.input_place_holder: inp, Q.target_values: targ})
 		self.input_batch = None
 		self.targ_batch = None
 		return q_vals, loss, min_score, gradients		
@@ -112,9 +106,6 @@ class Q_Approx:
 		if use_Q is None:
 			use_Q = self.target
 		b = self.params['backup']
-		i = state['i']
-		t = state['t']
-		ts = state['ts']
 		ob_size = self.params['ob_size']
 		window = self.params['window']
 		batch = self.params['batch']
@@ -122,22 +113,28 @@ class Q_Approx:
 		continuous = self.params['continuous']
 		time_unit = self.params['H']/self.params['T']
 		vol_unit = self.params['V'] / self.params['I']
+		T = self.params['T']
 
+		i = state['inv']
+		t = state['t']
+		ts = state['ts']
 		if ts % 100 == 0 and b == 'sampling':
 			sess.run(self.updateTargetOperation)
 		
 		backup = 0
 		curr_action = action
 		tgt_price = env.mid_spread(ts + time_unit * (self.params['T']- t))
-		leftover = vol_unit * i
+		leftover = i
 
 		states = []
 		rewards = []
+		trades_cost = 0 
 
 		if reset:
 			if params['stateful']:
-				env.get_timesteps(sample, sample + time_unit*length+ 1, i, i*vol_unit)
-			s = create_input_window_stateless(env, ts, window, ob_size, t, i)
+				env.get_timesteps(ts, ts + time_unit*length+ 1, self.params['I'], self.params['V'])
+			left = (1.0 * leftover / self.params['V']) if continuous else int(round(leftover / vol_unit))
+			s = create_input_window_stateless(env, ts, window, ob_size, t, left)
 			states.append(s)
 		# rollout bellman operator for multiple action steps
 		for idx in range(length):
@@ -149,10 +146,11 @@ class Q_Approx:
 				curr_book = env.get_book(ts + idx*time_unit)
 			actions = sorted(curr_book.a.keys())
 			actions.append(0)
-			limit_price = float("inf") if t == T else actions[a]
+			limit_price = float("inf") if t == T else actions[action]
 
 			# execute
-			spent, leftover = env.limit_order(0, limit_price, leftover)
+			num_shares = leftover
+			spent, leftover = env.limit_order(0, limit_price, num_shares)
 			if t >= T:
 				spent += leftover * actions[-2]
 				argmin = 0
@@ -163,9 +161,18 @@ class Q_Approx:
 					next_book_vec = create_input_window_stateful(env, window, ob_size, t + 1, left, time_unit)
 				else: 
 					next_book_vec = create_input_window_stateless(env, ts + time_unit, window, ob_size, t + 1, left)
+				if b == 'doubleQ':
+					action = sess.run((use_Q.min_action), feed_dict={
+											use_Q.input_place_holder: next_book_vec
+								  })
+					next_scores = sess.run((self.target.predictions), feed_dict={
+											use_Q.input_place_holder: next_book_vec
+								  })
+					argmin = next_scores[action]
+				else: 
 					next_scores, argmin, action = sess.run((use_Q.predictions, use_Q.min_score, use_Q.min_action), feed_dict={
-												use_Q.input_place_holder: next_book_vec
-									  })
+											use_Q.input_place_holder: next_book_vec
+								  })
 				states.append(next_book_vec)
 			# update state and record value of transaction
 			t += 1
@@ -175,11 +182,16 @@ class Q_Approx:
 			t_cost =  (float(price_paid) - tgt_price)/tgt_price * 100
 			backup += t_cost * diff if i!=0 else 0
 			rewards.append([t_cost, diff])
+		trades_cost = 0 if (i - leftover) == 0 else (1.0*backup/(i - leftover))
 		backup += leftover * argmin
-		backup = (1.0* backup)/ (vol_unit*i)
+		backup = 0 if i == 0 else (1.0* backup)/ (i)
 		rewards.append([argmin, leftover])
-		return backup, states, rewards
+		return backup, states, rewards, trades_cost
 
+	def predict(self, sess, state):
+		scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
+											self.target.input_place_holder: state})
+		return scores, argmin, action
 
 	def submit_to_batch(self, inp, target):
 		self.inp_buff.append(inp)
@@ -210,41 +222,47 @@ class Q_Approx:
 # class A3C:
 
 
+def compute_pool_size(h, w, psize, stride, k):
+	W_2 = (w - psize)/stride + 1
+	H_2 = (h - psize)/stride + 1
+	return [W_2, H_2, key]
+
+def compute_outputsize(h, w, fsize, stride, padding, k):
+	W_2 = (w - fsize + 2 * padding)/ stride + 1
+	H_2 = (h - fsize + 2 * padding)/ stride + 1
+	return [W_2, H_2, k]
 
 class Q_CNN: 
 
 	def __init__(self, params, name):
 		self.name = name
 		self.params = Params(params['window'], params['ob_size'], params['hidden_size'], params['depth'], params['actions'], params['batch'])
-		self.f = params['filters']
-		self.pool = self.f['pool']
+		self.layers = params['layers']
 		self.build_model_graph()
-		if not target:
-			self.add_training_objective()
 
 	def build_model_graph(self):
 		self.filter_tensors = {}
 		self.bias_tensors = {}
-		self.conv_layer_out = []
-		self.pool_out = []
-		p = self.pool
+		self.conv_layer_out
 		# lots to decisions
 		with tf.variable_scope(self.name) as self.scope:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
-			for name, layer in self.f.items():
-				for fil, params in l.items():
-					n = '{}_filter_size_{}_stride_{}_num_{}'.format(name, params['size'], params['stride'], params['num'])
-					s = [params['size'], params['size'], 1, params['num']]
-					o_s = compute_outputsize(self.params.window, self.params.ob_size * 4 + 2,params['size'], params['stride'], 0, params['num'])
+			curr_dimension = [self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1]
+			for name, layer_params in self.layers.items():
+				if layer['type'] == 'conv':
+					n = 'conv_{}_filter_size_{}_stride_{}_num_{}'.format(name, layer_params['size'], layer_params['stride'], layer_params['num'])
+					s = [layer_params['size'], layer_params['size'], 1, layer_params['num']]
+					o_s = compute_outputsize(self.params.window, self.params.ob_size * 4 + 2,layer_params['size'], layer_params['stride'], 0, layer_params['num'])
+					strides = [1, layer_params['stride'], layer_params['stride'], 1]
 					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
 					self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
-					conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], params, "VALID")
-					h = tf.nn.relu(tf.nn.bias_add(conv_output, bias), name=n+'relu')
-					conv_layer_out.append(h)
-				for conv in conv_layer_out:
-					out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
-					pool_out.append(out)
-				self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
+					conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], strides, "VALID")
+					#conv_bias = tf.nn.bias_add(conv_output, )
+				#if layer['type'] == ['pool']:
+				#for conv in conv_layer_out:
+				#	out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
+				#	pool_out.append(out)
+				#self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
 
 	def add_training_objective(self):
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
@@ -270,14 +288,14 @@ class Q_RNN:
 		self.name = name
 		self.params = Params(params['window'], params['ob_size'], params['hidden_size'], params['depth'], params['actions'], params['batch'])
 		self.build_model_graph()	
+		self.add_training_objective()
 
 	def build_model_graph(self): 
 		with tf.variable_scope(self.name) as self.scope:
-			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2), name='input')
+			self.input_place_holder = tf.placeholder(tf.float32, shape=(None, self.params.window, self.params.ob_size * 4 + 2), name='input')
 			self.forward_cell_layers = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.LSTMCell(self.params.hidden_size) for i in range(self.params.hidden_depth)])
-			self.rnn_output, self.final_rnn_state = tf.nn.dynamic_rnn(self.forward_cell_layers, self.input_place_holder, \
-								sequence_length=[self.params.window]*self.params.batch, dtype=tf.float32)
-			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [self.params.batch, 1, self.params.hidden_size]), axis=1)
+			self.rnn_output, self.final_rnn_state = tf.nn.dynamic_rnn(self.forward_cell_layers, self.input_place_holder, dtype=tf.float32)
+			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [-1, 1, self.params.hidden_size]), axis=1)
 			self.U = tf.get_variable('U', shape=[self.params.hidden_size, self.params.actions])
 			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
 			self.predictions = tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32') 
@@ -329,27 +347,24 @@ def create_input_window_stateless(env, ts, window, ob_size, t, i):
 		return window_vec
 
 def create_input_window_stateful(env, window, ob_size, t, i, time_unit):
-	if(ts < window - 1):
-		return np.zeros(shape=[1, window, ob_size * 4 + 2])
-	else:
-		vecs = []
-		# wind forward to the window
-		for i in range(0, time_unit - window):
-			env.get_next_state()
-		for idx in range(0, window):
-			book_vec = env.get_next_state().vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
-			vecs.append(book_vec)
-		window_vec = np.concatenate(vecs, axis=1)
-		return window_vec
+	vecs = []
+	# wind forward to the window
+	for i in range(0, time_unit - window):
+		env.get_next_state()
+	for idx in range(0, window):
+		book_vec = env.get_next_state().vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
+		vecs.append(book_vec)
+	window_vec = np.concatenate(vecs, axis=1)
+	return window_vec
 
 
 
-def execute_algo(Q, session, env, H, V, I, T, steps, S):
+def execute_algo(agent, session, env, H, V, I, T, steps, S):
 	divs = 10
 	env.get_timesteps(1, S+2, I, V)
 	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
-	window = Q.params.window
-	ob_size = Q.params.ob_size
+	window = agent.params['window']
+	ob_size = agent.params['ob_size']
 	# remaining volume and list of trades made by algorithm
 	executions = []
 	volume = V
@@ -383,7 +398,7 @@ def execute_algo(Q, session, env, H, V, I, T, steps, S):
 		actions = sorted(curr_book.a.keys())
 		actions.append(0)
 		# compute and execute the next action using the table
-		min_action = Q.greedy_action(session, input_book)
+		scores, argmin, min_action = agent.predict(session, input_book)
 		paid, leftover = env.limit_order(0, actions[min_action], volume)
 		print min_action
 		# if we are at the last time step, have to submit everything remaining to OB
@@ -409,13 +424,60 @@ def write_trades(executions, tradesOutputFilename="DQN"):
 	executions.insert(0, ['Time Left', 'Rounded Units Left', 'Bid Ask Spread', 'Volume Misbalance', 'Immediate Cost', 'Signed Transcation Volume' ,'Action', 'Reward', 'Volume'])
 	w.writerows(executions)
 
-
-
-def run_advantage_epoch(sess, env, Q, Q_target, updateTargetOperation, H, V, I, T, L, S):
-	print 'hi'
-
-def run_sampling_DQN():
-	print 'hi'
+def run_sampling_DQN(sess, env, agent, params):
+	ob_size = params['ob_size']
+	window = params['window']
+	H = params['H']
+	V = params['V']
+	I = params['I']	
+	T = params['T']
+	L = params['L']
+	S = params['S']
+	length = params['length']
+	e = 0.5
+	losses = []
+	vol_unit = V / I
+	time_unit = H / T
+	state = {}
+	agent.choose_backup_networks()
+	order_books = len(env.books)
+	costs = []
+	for ts in range(11, S+11):
+		sample = random.randint(0, order_books - (H + 1))
+		i = V
+		t = 0
+		curr_state = create_input_window_stateless(env, sample, window, ob_size, t, i)	
+		env.get_timesteps(sample, sample + time_unit * T + 1, I, V)
+		while t < T:
+			scores, argmin, action = agent.predict(sess, curr_state)
+			if np.random.rand(1) < e:
+				a = np.array([random.randint(0, params['L'])])[0]
+			else:
+				a = action
+			state['inv'] = i
+			state['t'] = t
+			state['ts'] = sample 
+			backup, states, rewards, cost = agent.calculate_target(sess, env, state, a, length, reset=False)
+			costs.append(cost)
+			scores[0][a] = backup
+			inp = states[0]
+			targ = scores.reshape(1, L + 1)
+			agent.submit_to_batch(inp, targ)
+			t = t + length
+			i = rewards[-1][1]
+			curr_state = states[-1]
+			if agent.batch_ready():
+				print np.mean(costs)
+				costs = []
+				b_in = agent.input_batch
+				b_targ = agent.targ_batch
+				q_vals, loss, min_score, gradients = agent.update_networks(sess)
+				agent.choose_backup_networks()
+				losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
+				print_stuff(q_vals, loss, b_in, b_targ)
+		if ts % 1000 == 0:
+			print ts
+	print 'Epoch Over'
 
 def run_dp(sess, env, agent, params):
 	ob_size = params['ob_size']
@@ -435,19 +497,22 @@ def run_dp(sess, env, agent, params):
 	for t in range(T+1)[::-1]:
 		for i in range(I+1):
 			for ts in range(1, S+1):
-				sample = random.randint(0, order_books - (length * (time_unit + 1)))
+				sample = random.randint(0, order_books - (H + 1))
 				backup = np.zeros(shape=[L+1])
 				argmins = np.zeros(shape=[L+1])
 				t_costs = []
 				for a in range(L+1):
-					state['i'] = i
+					state = {}
+					state['inv'] = i * vol_unit
 					state['t'] = t
 					state['ts'] = sample 
-					backup[a], states, t_costs[a] = agent.calculate_target(self, sess, env, agent.target, state, a, length)
+					backup[a], states, t_cost = agent.calculate_target(sess, env, state, a, length)
+					t_costs.append(t_cost)
 				inp = states[0]
 				targ = backup.reshape(1, L + 1)
 				agent.submit_to_batch(inp, targ)
 				if agent.batch_ready():
+					print '{},{}'.format(t, i)
 					b_in = agent.input_batch
 					b_targ = agent.targ_batch
 					q_vals, loss, min_score, gradients = agent.update_networks(sess)
@@ -459,13 +524,13 @@ def run_dp(sess, env, agent, params):
 	print 'Epoch Over'
 
 def print_stuff(q_vals, loss, inputs, targets):
-	print 'inputs'
-	print inputs
-	print 'Q'
-	print q_vals
-	print 'targets'
-	print targets
-	print 'loss'
+	#print 'inputs'
+	#print inputs[0][0][-2:]
+	#print 'Q'
+	#print q_vals
+	#print 'targets'
+	#print targets
+	#print 'loss'
 	print np.mean(loss)
 
 
@@ -490,8 +555,8 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 		if params['backup'] == 'sampling':
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_dp(sess, env, agent, params)
-		executions = execute_algo(sess, env, agent, test_steps, S)
+			run_sampling_DQN(sess, env, agent, params)
+		executions = execute_algo(sess, env, agent, test_steps, params['S'])
 		write_trades(executions)
 
 
@@ -501,23 +566,24 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 if __name__ == "__main__":
 	params = {
 		'backup': 'sampling',
-		'network': 'CNN',
+		'network': 'RNN',
 		'window': 10,
 		'ob_size': 10,
-		'hidden_size': 15, 
-		'depth': 2, 
+		'hidden_size': 40, 
+		'depth': 3, 
 		'actions': 11, 
-		'batch': 1,
+		'batch': 1000,
 		'continuous': True,
 		'stateful': True,
 		'rollout': 1,
+		'length': 1,
 		'H': 1000, 
 		'V': 1000,
 		'T': 10,
 		'I': 10,
 		'T': 10,
-		'L': 10
-		'S': 1000
+		'L': 10,
+		'S': 10000
 	}
 	train_DQN_DP(1, '../data/10_GOOG.csv', params, 100000)
 
