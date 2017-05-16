@@ -222,15 +222,15 @@ class Q_Approx:
 # class A3C:
 
 
-def compute_pool_size(h, w, psize, stride, k):
+def compute_pool_size(b, h, w, psize, stride, k):
 	W_2 = (w - psize)/stride + 1
 	H_2 = (h - psize)/stride + 1
-	return [W_2, H_2, key]
+	return [b, W_2, H_2, key]
 
-def compute_outputsize(h, w, fsize, stride, padding, k):
+def compute_output_size(b, h, w, fsize, stride, padding, k):
 	W_2 = (w - fsize + 2 * padding)/ stride + 1
 	H_2 = (h - fsize + 2 * padding)/ stride + 1
-	return [W_2, H_2, k]
+	return [b, W_2, H_2, k]
 
 class Q_CNN: 
 
@@ -248,21 +248,23 @@ class Q_CNN:
 		with tf.variable_scope(self.name) as self.scope:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
 			curr_dimension = [self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1]
+			curr_layer = self.input_place_holder
 			for name, layer_params in self.layers.items():
 				if layer['type'] == 'conv':
 					n = 'conv_{}_filter_size_{}_stride_{}_num_{}'.format(name, layer_params['size'], layer_params['stride'], layer_params['num'])
-					s = [layer_params['size'], layer_params['size'], 1, layer_params['num']]
-					o_s = compute_outputsize(self.params.window, self.params.ob_size * 4 + 2,layer_params['size'], layer_params['stride'], 0, layer_params['num'])
+					s = [layer_params['size'], layer_params['size'], curr_layer[3], layer_params['num']]
 					strides = [1, layer_params['stride'], layer_params['stride'], 1]
 					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
 					self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
-					conv_output = tf.nn.conv2d(self.input_place_holder, self.filter_tensors[name], strides, "VALID")
-					#conv_bias = tf.nn.bias_add(conv_output, )
+					conv_output = tf.nn.conv2d(curr_layer, self.filter_tensors[name], strides, "VALID")
+					conv_bias = tf.nn.bias_add(conv_output, self.bias_tensors[name])
+					curr_layer = conv_bias
+					curr_dimension = compute_output_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], 0, layer_params['num'])
 				#if layer['type'] == ['pool']:
-				#for conv in conv_layer_out:
-				#	out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
-				#	pool_out.append(out)
-				#self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
+				for conv in conv_layer_out:
+					out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
+					pool_out.append(out)
+				self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
 
 	def add_training_objective(self):
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
@@ -358,8 +360,8 @@ def create_input_window_stateful(env, window, ob_size, t, i, time_unit):
 	return window_vec
 
 
-
-def execute_algo(agent, session, env, H, V, I, T, steps, S):
+def execute_algo(agent, params, session, env, steps):
+	H, V, I, T, S = params['H'], params['V'], params['I'], params['T'], params['S']
 	divs = 10
 	env.get_timesteps(1, S+2, I, V)
 	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
@@ -468,7 +470,7 @@ def run_sampling_DQN(sess, env, agent, params):
 			i = rewards[-1][1]
 			curr_state = states[-1]
 			if agent.batch_ready():
-				averages.append(np.means(costs))
+				averages.append(np.mean(costs))
 				#print np.mean(costs)
 				costs = []
 				b_in = agent.input_batch
@@ -480,7 +482,7 @@ def run_sampling_DQN(sess, env, agent, params):
 				if len(averages) == 10:
 					print 'average reward of last 10 batches: {}'.format(np.mean(averages))
 					averages = []
-		if ts % 1000 == 0:
+		#if ts % 1000 == 0:
 			#print ts
 	print 'Epoch Over'
 
@@ -543,12 +545,21 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 	if env is None:
 		env = Environment(ob_file,setup=False)
 	filters = {
-		'filt1': {
-			'size': 2,
+		'conv1': {
+			'size': 3,
+			'stride': 1,	
+			'num': 100
+		},
+		'pool1': {
+			'stride': 4,
+			'size': 5
+		},
+		'conv2': {
+			'size': ,
 			'stride': 2,	
 			'num': 10
 		},
-		'pool': {
+		'pool2': {
 			'stride': 4,
 			'size': 5
 		}
@@ -561,7 +572,7 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
 			run_sampling_DQN(sess, env, agent, params)
-		executions = execute_algo(sess, env, agent, test_steps, params['S'])
+		executions = execute_algo(agent, params, sess, env, test_steps)
 		write_trades(executions)
 
 
@@ -588,7 +599,7 @@ if __name__ == "__main__":
 		'I': 10,
 		'T': 10,
 		'L': 10,
-		'S': 10000
+		'S': 30000
 	}
 	train_DQN_DP(1, '../data/10_GOOG.csv', params, 100000)
 
