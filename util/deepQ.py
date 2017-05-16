@@ -189,8 +189,17 @@ class Q_Approx:
 		return backup, states, rewards, trades_cost
 
 	def predict(self, sess, state):
-		scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
+		if self.params['backup'] != 'doubleQ':
+			scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
 											self.target.input_place_holder: state})
+		else: 
+			scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
+											self.target.input_place_holder: state})
+			scores_1, argmin, action = sess.run((self.fit, self.fit.min_score, self.fit.min_action), feed_dict={
+											self.fit.input_place_holder: state})
+			scores = (scores + scores_1) / 2
+			argmin = np.amin(scores)
+			action = np.argmin(np.squeeze(scores))
 		return scores, argmin, action
 
 	def submit_to_batch(self, inp, target):
@@ -260,10 +269,17 @@ class Q_CNN:
 					conv_bias = tf.nn.bias_add(conv_output, self.bias_tensors[name])
 					curr_layer = conv_bias
 					curr_dimension = compute_output_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], 0, layer_params['num'])
-				#if layer['type'] == ['pool']:
-				for conv in conv_layer_out:
-					out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
-					pool_out.append(out)
+				if layer['type'] == 'pool':
+					if layer['pool_type'] == 'max':
+						s = [curr_dimension[0], layer_params['size'], layer_params['size'], curr_dimension[3]]
+						stride = [1, layer_params['stride'], layer_params['stride'], 1]
+						for conv in conv_layer_out:
+							out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
+							pool_out.append(out)
+					elif layer['pool_tyle'] == 'avg':
+						print 'hi'
+				if layer['type'] == 'fc':
+					print 'hi'
 				self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
 
 	def add_training_objective(self):
@@ -497,6 +513,8 @@ def run_dp(sess, env, agent, params):
 	S = params['S']
 	length = params['length']
 	losses = []
+	averages = []
+	costs = []
 	vol_unit = V / I
 	time_unit = H / T
 	agent.choose_backup_networks()
@@ -519,14 +537,20 @@ def run_dp(sess, env, agent, params):
 				targ = backup.reshape(1, L + 1)
 				agent.submit_to_batch(inp, targ)
 				if agent.batch_ready():
+					averages.append(np.mean(costs))
+					#print np.mean(costs)
+					costs = []
 					print '{},{}'.format(t, i)
 					b_in = agent.input_batch
 					b_targ = agent.targ_batch
 					q_vals, loss, min_score, gradients = agent.update_networks(sess)
 					agent.choose_backup_networks()
 					losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
-					print_stuff(q_vals, loss, b_in, b_targ)
-				if ts % 1000 == 0:
+					#print_stuff(q_vals, loss, b_in, b_targ)
+					if len(averages) == 10:
+						print 'average reward of last 10 batches: {}'.format(np.mean(averages))
+						averages = []
+				if targets % 1000 == 0:
 					print ts
 	print 'Epoch Over'
 
@@ -555,7 +579,7 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 			'size': 5
 		},
 		'conv2': {
-			'size': ,
+			'size': 2,
 			'stride': 2,	
 			'num': 10
 		},
@@ -571,7 +595,7 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 		if params['backup'] == 'sampling':
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_sampling_DQN(sess, env, agent, params)
+			run_dp(sess, env, agent, params)
 		executions = execute_algo(agent, params, sess, env, test_steps)
 		write_trades(executions)
 
@@ -599,8 +623,8 @@ if __name__ == "__main__":
 		'I': 10,
 		'T': 10,
 		'L': 10,
-		'S': 30000
+		'S': 100
 	}
-	train_DQN_DP(1, '../data/10_GOOG.csv', params, 100000)
+	train_DQN_DP(3, '../data/10_GOOG.csv', params, 100000)
 
 	
