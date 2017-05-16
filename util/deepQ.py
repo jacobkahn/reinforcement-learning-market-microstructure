@@ -273,14 +273,19 @@ class Q_CNN:
 					if layer['pool_type'] == 'max':
 						s = [curr_dimension[0], layer_params['size'], layer_params['size'], curr_dimension[3]]
 						stride = [1, layer_params['stride'], layer_params['stride'], 1]
-						for conv in conv_layer_out:
-							out = tf.nn.max_pool(conv, [self.params.batch, p['size'], p['size'],1], [1, p['stride'], p['stride'], 1], 'VALID')
-							pool_out.append(out)
+						x = tf.nn.max_pool(curr_layer, s, stride, 'VALID')
+						curr_layer = x
+						curr_dimension = compute_pool_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], curr_dimension[3])
 					elif layer['pool_tyle'] == 'avg':
-						print 'hi'
+						s = [curr_dimension[0], layer_params['size'], layer_params['size'], curr_dimension[3]]
+						stride = [1, layer_params['stride'], layer_params['stride'], 1]
+						x = tf.nn.avg_pool(curr_layer, s, stride, 'VALID')
+						curr_layer = x
+						curr_dimension = compute_pool_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], curr_dimension[3])
 				if layer['type'] == 'fc':
 					print 'hi'
-				self.final_layer = tf.squeeze(tf.concatenate(pool_out, 3)) 
+				#final_s = 
+				self.final_weights = tf.squeeze(tf.concatenate(pool_out, 3)) 
 
 	def add_training_objective(self):
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
@@ -324,7 +329,7 @@ class Q_RNN:
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
 		self.batch_losses = tf.reduce_sum(tf.squared_difference(self.predictions, self.target_values), axis=1)
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0)
-		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
+		self.trainer = tf.train.AdamOptimizer(learning_rate=0.001)
 		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
 		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
 		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
@@ -462,6 +467,7 @@ def run_sampling_DQN(sess, env, agent, params):
 	averages = []
 	costs = []
 	for ts in range(11, S+11):
+		e = e / ts * 100
 		sample = random.randint(0, order_books - (H + 1))
 		i = V
 		t = 0
@@ -531,7 +537,7 @@ def run_dp(sess, env, agent, params):
 					state['inv'] = i * vol_unit
 					state['t'] = t
 					state['ts'] = sample 
-					backup[a], states, t_cost = agent.calculate_target(sess, env, state, a, length)
+					backup[a], states, t_cost, cost = agent.calculate_target(sess, env, state, a, length)
 					t_costs.append(t_cost)
 				inp = states[0]
 				targ = backup.reshape(1, L + 1)
@@ -546,21 +552,19 @@ def run_dp(sess, env, agent, params):
 					q_vals, loss, min_score, gradients = agent.update_networks(sess)
 					agent.choose_backup_networks()
 					losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
-					#print_stuff(q_vals, loss, b_in, b_targ)
+					print_stuff(q_vals, loss, b_in, b_targ)
 					if len(averages) == 10:
 						print 'average reward of last 10 batches: {}'.format(np.mean(averages))
 						averages = []
-				if targets % 1000 == 0:
-					print ts
 	print 'Epoch Over'
 
 def print_stuff(q_vals, loss, inputs, targets):
 	#print 'inputs'
 	#print inputs[0][0][-2:]
-	#print 'Q'
-	#print q_vals
-	#print 'targets'
-	#print targets
+	print 'Q'
+	print q_vals
+	print 'targets'
+	print targets
 	#print 'loss'
 	print np.mean(loss)
 
@@ -568,7 +572,7 @@ def print_stuff(q_vals, loss, inputs, targets):
 def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 	if env is None:
 		env = Environment(ob_file,setup=False)
-	filters = {
+	layers = {
 		'conv1': {
 			'size': 3,
 			'stride': 1,	
@@ -595,7 +599,7 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 		if params['backup'] == 'sampling':
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_dp(sess, env, agent, params)
+			run_sampling_DQN(sess, env, agent, params)
 		executions = execute_algo(agent, params, sess, env, test_steps)
 		write_trades(executions)
 
@@ -609,8 +613,8 @@ if __name__ == "__main__":
 		'network': 'RNN',
 		'window': 10,
 		'ob_size': 10,
-		'hidden_size': 40, 
-		'depth': 3, 
+		'hidden_size': 10, 
+		'depth': 2, 
 		'actions': 11, 
 		'batch': 1000,
 		'continuous': True,
@@ -623,7 +627,7 @@ if __name__ == "__main__":
 		'I': 10,
 		'T': 10,
 		'L': 10,
-		'S': 100
+		'S': 100000
 	}
 	train_DQN_DP(3, '../data/10_GOOG.csv', params, 100000)
 
