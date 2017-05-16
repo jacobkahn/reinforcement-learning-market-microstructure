@@ -441,6 +441,7 @@ def run_sampling_DQN(sess, env, agent, params):
 	state = {}
 	agent.choose_backup_networks()
 	order_books = len(env.books)
+	averages = []
 	costs = []
 	for ts in range(11, S+11):
 		sample = random.randint(0, order_books - (H + 1))
@@ -467,6 +468,7 @@ def run_sampling_DQN(sess, env, agent, params):
 			i = rewards[-1][1]
 			curr_state = states[-1]
 			if agent.batch_ready():
+				averages.append(np.means(costs))
 				print np.mean(costs)
 				costs = []
 				b_in = agent.input_batch
@@ -475,6 +477,9 @@ def run_sampling_DQN(sess, env, agent, params):
 				agent.choose_backup_networks()
 				losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
 				print_stuff(q_vals, loss, b_in, b_targ)
+				if len(averages) == 10:
+					print 'average reward of last 10 batches: {}'.format(np.mean(averages))
+					averages = []
 		if ts % 1000 == 0:
 			print ts
 	print 'Epoch Over'
