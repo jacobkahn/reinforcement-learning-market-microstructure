@@ -469,19 +469,19 @@ def run_sampling_DQN(sess, env, agent, params):
 			curr_state = states[-1]
 			if agent.batch_ready():
 				averages.append(np.means(costs))
-				print np.mean(costs)
+				#print np.mean(costs)
 				costs = []
 				b_in = agent.input_batch
 				b_targ = agent.targ_batch
 				q_vals, loss, min_score, gradients = agent.update_networks(sess)
 				agent.choose_backup_networks()
 				losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
-				print_stuff(q_vals, loss, b_in, b_targ)
+				#print_stuff(q_vals, loss, b_in, b_targ)
 				if len(averages) == 10:
 					print 'average reward of last 10 batches: {}'.format(np.mean(averages))
 					averages = []
 		if ts % 1000 == 0:
-			print ts
+			#print ts
 	print 'Epoch Over'
 
 def run_dp(sess, env, agent, params):
