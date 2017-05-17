@@ -513,7 +513,7 @@ if __name__ == "__main__":
 		'replay': True,
 		'replay_size': 100,
 		'replays': 4,
-		'window': 10,
+		'window': 50,
 		'ob_size': 10,
 		'hidden_size': 10, 
 		'depth': 2, 
