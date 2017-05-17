@@ -1,8 +1,9 @@
 	To Do For Project
 
-		- implement CNN - Amit(tomorrow)
+		- implement CNN - Amit(tomorrow) - done 
 		- implement backups for DQN - Amit(tomorrow) - done
-		- advantage network/ dueling net(Amit)
+		- advantage network/ dueling net(Amit) - done
+		- implement "warmed up" net(Amit)
 		
 		- add time of day and day of week fields - Jacob
 		- new class for mulitple assets - Jacob
@@ -12,7 +13,7 @@
 
 		- install tensorboard - Amit and Jacob
 		- write episode creator - Amit(tomorrow) - done
-		- try DQN without dynamic programming - Amit(tomorrow) - almost done
+		- try DQN without dynamic programming - Amit(tomorrow) -  s done
 		- batching - Amit(tomorrow) - done
 
 

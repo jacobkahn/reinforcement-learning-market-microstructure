@@ -1,5 +1,6 @@
 from environment import *
 from agent import *
+from q_learners import *
 from collections import defaultdict
 from random import shuffle
 import tensorflow as tf 
@@ -16,13 +17,6 @@ class Params:
 		self.actions = actions
 		self.batch = batch
 
-class Filters:
-	def __init__(self, filters):
-		self.f = filters
-
-
-
-
 class Q_Approx:
 	def __init__(self, params):
 		self.params = params
@@ -30,9 +24,11 @@ class Q_Approx:
 		a = params['network']
 		self.inp_buff = []
 		self.targ_buff = []
+		self.replay = []
 		self.batchs = []
 		self.input_batch = None
 		self.targ_batch = None
+		self.counter = 0
 		if b == 'replay_buffer' or b == 'sampling':
 			self.Q = self.create_network(a, params, 'Q')
 			self.Q_target = self.create_network(a, params, 'Q_target')
@@ -95,12 +91,12 @@ class Q_Approx:
 		Q = self.fit
 		inp = self.input_batch
 		targ = self.targ_batch
-		q_vals, loss, min_score, gradients = sess.run(
-				(Q.predictions, Q.loss, Q.min_score, Q.gvs), 
+		q_vals, loss, min_score = sess.run(
+				(Q.predictions, Q.loss, Q.min_score), 
 				feed_dict={Q.input_place_holder: inp, Q.target_values: targ})
 		self.input_batch = None
 		self.targ_batch = None
-		return q_vals, loss, min_score, gradients		
+		return q_vals, loss, min_score		
 
 	def calculate_target(self, sess, env, state, action, length, use_Q=None, reset=True):
 		if use_Q is None:
@@ -114,11 +110,12 @@ class Q_Approx:
 		time_unit = self.params['H']/self.params['T']
 		vol_unit = self.params['V'] / self.params['I']
 		T = self.params['T']
+		self.counter +=1 
 
 		i = state['inv']
 		t = state['t']
 		ts = state['ts']
-		if ts % 100 == 0 and b == 'sampling':
+		if self.counter % 100 == 0 and b == 'sampling':
 			sess.run(self.updateTargetOperation)
 		
 		backup = 0
@@ -168,7 +165,7 @@ class Q_Approx:
 					next_scores = sess.run((self.target.predictions), feed_dict={
 											use_Q.input_place_holder: next_book_vec
 								  })
-					argmin = next_scores[action]
+					argmin = next_scores[0][action]
 				else: 
 					next_scores, argmin, action = sess.run((use_Q.predictions, use_Q.min_score, use_Q.min_action), feed_dict={
 											use_Q.input_place_holder: next_book_vec
@@ -195,7 +192,8 @@ class Q_Approx:
 		else: 
 			scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
 											self.target.input_place_holder: state})
-			scores_1, argmin, action = sess.run((self.fit, self.fit.min_score, self.fit.min_action), feed_dict={
+
+			scores_1, argmin, action = sess.run((self.fit.predictions, self.fit.min_score, self.fit.min_action), feed_dict={
 											self.fit.input_place_holder: state})
 			scores = (scores + scores_1) / 2
 			argmin = np.amin(scores)
@@ -205,7 +203,7 @@ class Q_Approx:
 	def submit_to_batch(self, inp, target):
 		self.inp_buff.append(inp)
 		self.targ_buff.append(target)
-		if self.params['backup'] == 'replay_buffer':
+		if self.params['replay'] == True:
 			self.replay.append((inp, target))
 			if len(self.replay) > self.params['replay_size']:
 				self.replay.pop(0)
@@ -218,6 +216,11 @@ class Q_Approx:
 				inp, target = random.choice(self.replay)
 				self.inp_buff.append(inp)
 				self.targ_buff.append(target)
+			if len(self.inp_buff) == self.params['batch']:
+				self.input_batch = np.concatenate(self.inp_buff, axis=0)
+				self.targ_batch = np.concatenate(self.targ_buff, axis=0)
+				self.inp_buff = []
+				self.targ_buff = []
 		else:
 			if len(self.inp_buff) == self.params['batch']:
 				self.input_batch = np.concatenate(self.inp_buff, axis=0)
@@ -234,119 +237,12 @@ class Q_Approx:
 def compute_pool_size(b, h, w, psize, stride, k):
 	W_2 = (w - psize)/stride + 1
 	H_2 = (h - psize)/stride + 1
-	return [b, W_2, H_2, key]
+	return [b, H_2, W_2, k]
 
 def compute_output_size(b, h, w, fsize, stride, padding, k):
 	W_2 = (w - fsize + 2 * padding)/ stride + 1
 	H_2 = (h - fsize + 2 * padding)/ stride + 1
-	return [b, W_2, H_2, k]
-
-class Q_CNN: 
-
-	def __init__(self, params, name):
-		self.name = name
-		self.params = Params(params['window'], params['ob_size'], params['hidden_size'], params['depth'], params['actions'], params['batch'])
-		self.layers = params['layers']
-		self.build_model_graph()
-
-	def build_model_graph(self):
-		self.filter_tensors = {}
-		self.bias_tensors = {}
-		self.conv_layer_out
-		# lots to decisions
-		with tf.variable_scope(self.name) as self.scope:
-			self.input_place_holder = tf.placeholder(tf.float32, shape=(self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1), name='input')
-			curr_dimension = [self.params.batch, self.params.window, self.params.ob_size * 4 + 2, 1]
-			curr_layer = self.input_place_holder
-			for name, layer_params in self.layers.items():
-				if layer['type'] == 'conv':
-					n = 'conv_{}_filter_size_{}_stride_{}_num_{}'.format(name, layer_params['size'], layer_params['stride'], layer_params['num'])
-					s = [layer_params['size'], layer_params['size'], curr_layer[3], layer_params['num']]
-					strides = [1, layer_params['stride'], layer_params['stride'], 1]
-					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
-					self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[params['num']], stddev=0.1), name=n + '_bias')
-					conv_output = tf.nn.conv2d(curr_layer, self.filter_tensors[name], strides, "VALID")
-					conv_bias = tf.nn.bias_add(conv_output, self.bias_tensors[name])
-					curr_layer = conv_bias
-					curr_dimension = compute_output_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], 0, layer_params['num'])
-				if layer['type'] == 'pool':
-					if layer['pool_type'] == 'max':
-						s = [curr_dimension[0], layer_params['size'], layer_params['size'], curr_dimension[3]]
-						stride = [1, layer_params['stride'], layer_params['stride'], 1]
-						x = tf.nn.max_pool(curr_layer, s, stride, 'VALID')
-						curr_layer = x
-						curr_dimension = compute_pool_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], curr_dimension[3])
-					elif layer['pool_tyle'] == 'avg':
-						s = [curr_dimension[0], layer_params['size'], layer_params['size'], curr_dimension[3]]
-						stride = [1, layer_params['stride'], layer_params['stride'], 1]
-						x = tf.nn.avg_pool(curr_layer, s, stride, 'VALID')
-						curr_layer = x
-						curr_dimension = compute_pool_size(curr_dimension[0], curr_dimension[1], curr_dimension[2],layer_params['size'], layer_params['stride'], curr_dimension[3])
-				if layer['type'] == 'fc':
-					print 'hi'
-				#final_s = 
-				self.final_weights = tf.squeeze(tf.concatenate(pool_out, 3)) 
-
-	def add_training_objective(self):
-		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
-		self.batch_losses = tf.reduce_sum(tf.sqrt(tf.squared_difference(self.predictions, self.target_values)), axis=1)
-		self.loss = tf.reduce_sum(self.batch_losses, axis=0) + tf.nn.l2_loss(self.U) + tf.nn.l2_loss(self.b_2)
-		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
-		self.updateWeights = self.trainer.minimize(self.loss)
-
-	def copy_Q_Op(self, Q):
-		current_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope.name)
-		target_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=Q.scope.name)
-		op_holder =[]
-		for var, target_val in zip(sorted(current_variables, key=lambda v: v.name),
-                               sorted(target_variables, key=lambda v: v.name)):
-			op_holder.append(var.assign(target_val))
-		copy_operation = tf.group(*op_holder)
-		return copy_operation
-
-
-class Q_RNN: 
-
-	def __init__(self, params, name):
-		self.name = name
-		self.params = Params(params['window'], params['ob_size'], params['hidden_size'], params['depth'], params['actions'], params['batch'])
-		self.build_model_graph()	
-		self.add_training_objective()
-
-	def build_model_graph(self): 
-		with tf.variable_scope(self.name) as self.scope:
-			self.input_place_holder = tf.placeholder(tf.float32, shape=(None, self.params.window, self.params.ob_size * 4 + 2), name='input')
-			self.forward_cell_layers = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.LSTMCell(self.params.hidden_size) for i in range(self.params.hidden_depth)])
-			self.rnn_output, self.final_rnn_state = tf.nn.dynamic_rnn(self.forward_cell_layers, self.input_place_holder, dtype=tf.float32)
-			self.outs = tf.squeeze(tf.slice(self.rnn_output, [0, self.params.window - 1, 0], [-1, 1, self.params.hidden_size]), axis=1)
-			self.U = tf.get_variable('U', shape=[self.params.hidden_size, self.params.actions])
-			self.b_2 = tf.get_variable('b2', shape=[self.params.actions])
-			self.predictions = tf.cast((tf.matmul(self.outs, self.U) + self.b_2), 'float32') 
-			self.min_score = tf.reduce_min(self.predictions, reduction_indices=[1])
-			self.min_action = tf.argmin(tf.squeeze(self.predictions), axis=0, name="arg_min")
-
-	def add_training_objective(self):
-		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
-		self.batch_losses = tf.reduce_sum(tf.squared_difference(self.predictions, self.target_values), axis=1)
-		self.loss = tf.reduce_sum(self.batch_losses, axis=0)
-		self.trainer = tf.train.AdamOptimizer(learning_rate=0.001)
-		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
-		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
-		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
-
-	def copy_Q_Op(self, Q):
-		current_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope.name)
-		target_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=Q.scope.name)
-		op_holder =[]
-		for var, target_val in zip(sorted(current_variables, key=lambda v: v.name),
-                               sorted(target_variables, key=lambda v: v.name)):
-			op_holder.append(var.assign(target_val))
-		copy_operation = tf.group(*op_holder)
-		return copy_operation
-	
-	def greedy_action(self, session, book_vec):
-		min_action = session.run((self.min_action), feed_dict={ self.input_place_holder: book_vec})
-		return min_action
+	return [b, H_2, W_2, k]
 
 
 def create_input_window_test(env, window, ob_size, t, i):
@@ -497,12 +393,12 @@ def run_sampling_DQN(sess, env, agent, params):
 				costs = []
 				b_in = agent.input_batch
 				b_targ = agent.targ_batch
-				q_vals, loss, min_score, gradients = agent.update_networks(sess)
+				q_vals, loss, min_score = agent.update_networks(sess)
 				agent.choose_backup_networks()
-				losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
+				losses.append([q_vals, loss, min_score, b_in, b_targ])
 				#print_stuff(q_vals, loss, b_in, b_targ)
-				if len(averages) == 10:
-					print 'average reward of last 10 batches: {}'.format(np.mean(averages))
+				if len(averages) == 100:
+					print 'average reward of last 100 batches: {}'.format(np.mean(averages))
 					averages = []
 		#if ts % 1000 == 0:
 			#print ts
@@ -546,25 +442,25 @@ def run_dp(sess, env, agent, params):
 					averages.append(np.mean(costs))
 					#print np.mean(costs)
 					costs = []
-					print '{},{}'.format(t, i)
+					#print '{},{}'.format(t, i)
 					b_in = agent.input_batch
 					b_targ = agent.targ_batch
-					q_vals, loss, min_score, gradients = agent.update_networks(sess)
+					q_vals, loss, min_score = agent.update_networks(sess)
 					agent.choose_backup_networks()
-					losses.append([q_vals, loss, min_score, gradients, b_in, b_targ])
+					losses.append([q_vals, loss, min_score, b_in, b_targ])
 					print_stuff(q_vals, loss, b_in, b_targ)
-					if len(averages) == 10:
-						print 'average reward of last 10 batches: {}'.format(np.mean(averages))
+					if len(averages) == 100:
+						#xprint 'average reward of last 100 batches: {}'.format(np.mean(averages))
 						averages = []
 	print 'Epoch Over'
 
 def print_stuff(q_vals, loss, inputs, targets):
 	#print 'inputs'
 	#print inputs[0][0][-2:]
-	print 'Q'
-	print q_vals
-	print 'targets'
-	print targets
+	#print 'Q'
+	#print q_vals[-1]
+	#print 'targets'
+	#print targets[-1]
 	#print 'loss'
 	print np.mean(loss)
 
@@ -574,24 +470,26 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 		env = Environment(ob_file,setup=False)
 	layers = {
 		'conv1': {
+			'type': 'conv',
 			'size': 3,
 			'stride': 1,	
 			'num': 100
 		},
 		'pool1': {
+			'type': 'pool',
 			'stride': 4,
-			'size': 5
+			'size': 5,
+			'pool_type': 'max'
 		},
 		'conv2': {
+			'type': 'conv',
 			'size': 2,
 			'stride': 2,	
 			'num': 10
-		},
-		'pool2': {
-			'stride': 4,
-			'size': 5
 		}
 	}
+	params['layers'] = layers
+
 	agent = Q_Approx(params) 
 	init = tf.initialize_all_variables()
 	with tf.Session() as sess:
@@ -599,7 +497,7 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 		if params['backup'] == 'sampling':
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_sampling_DQN(sess, env, agent, params)
+			run_dp(sess, env, agent, params)
 		executions = execute_algo(agent, params, sess, env, test_steps)
 		write_trades(executions)
 
@@ -611,23 +509,27 @@ if __name__ == "__main__":
 	params = {
 		'backup': 'sampling',
 		'network': 'RNN',
+		'advantage': True,
+		'replay': True,
+		'replay_size': 100,
+		'replays': 4,
 		'window': 10,
 		'ob_size': 10,
 		'hidden_size': 10, 
 		'depth': 2, 
 		'actions': 11, 
-		'batch': 1000,
+		'batch': 10	,
 		'continuous': True,
 		'stateful': True,
 		'rollout': 1,
 		'length': 1,
 		'H': 1000, 
-		'V': 1000,
+		'V': 10000,
 		'T': 10,
 		'I': 10,
 		'T': 10,
 		'L': 10,
-		'S': 100000
+		'S': 100
 	}
 	train_DQN_DP(3, '../data/10_GOOG.csv', params, 100000)
 
