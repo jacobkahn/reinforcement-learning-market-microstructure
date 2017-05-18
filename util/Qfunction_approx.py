@@ -1,13 +1,13 @@
 from environment import *
 import random # for double q learning
-import numpy as np 
+import numpy as np
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn import linear_model
 
 class Q_Function:
 
 	def __init__(self, T, L, backup):
-		self.backup = backup		
+		self.backup = backup
 		self.T = T
 		self.L = L
 		self.pre_process = PolynomialFeatures(degree=2, include_bias=False)
@@ -24,10 +24,15 @@ class Q_Function:
 
 	def train_example(self, func, x, y):
 		x += 2
+		# add regression and random forest regression here
+		# switch on parameter in backup dictionary
 		func.partial_fit(self.pre_process.fit_transform(x), y)
 
 	def predict(self, func, x):
 		x += 2
+		# add regression and random forest regression here
+		# switch on parameter in backup dictionary
+		# just use L2 or whatever random forest
 		return func.predict(self.pre_process.fit_transform(x))
 
 	def update_table_buy(self, t, i, vol_unit, spread, volume_misbalance, im_cost, signed_vol, action, actions, env, tgt):
@@ -60,7 +65,7 @@ class Q_Function:
 			self.train_example(self.Q, np.array(s, ndmin=2), np.array((weighted_reward), ndmin=1))
 
 		elif self.backup['name'] == "replay buffer":
-			# pull replay information		
+			# pull replay information
 			replays = self.backup['replays']
 			size = self.backup['buff_size']
 			# determine limit price this action specifies and submit it to orderbook
@@ -82,7 +87,7 @@ class Q_Function:
 				next_key = str(t + 1) + "," + str(rounded_unit) + "," + str(spread) + "," +str(volume_misbalance) + ',' + str(im_cost) + "," +str(signed_vol)
 				_, arg_min = self.arg_min(next_key)
 
-				# update the table with this key 
+				# update the table with this key
 				diff = vol_unit * i - leftover
 				price_paid =  tgt if diff == 0 else spent / diff
 				t_cost =  (float(price_paid) - tgt)/tgt * 100
@@ -163,11 +168,9 @@ class Q_Function:
 			x.append(int(in_a))
 			if self.backup['name'] == 'doubleQ':
 				value = (self.predict(self.Q_1, np.array(x,ndmin=2)) + self.predict(self.Q_2, np.array(x,ndmin=2)))/2
-			else:	
+			else:
 				value = self.predict(self.Q, np.array(x,ndmin=2))
 			if value < min_val:
 					min_val = value
 					min_action = action
 		return min_action, min_val
-
-

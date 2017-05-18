@@ -3,9 +3,10 @@ from agent import *
 from q_learners import *
 from collections import defaultdict
 from random import shuffle
-import tensorflow as tf 
+import tensorflow as tf
 import numpy as np
 import csv
+import os
 
 
 class Params:
@@ -78,7 +79,7 @@ class Q_Approx:
 		elif b == 'dueling net':
 			print 'hi'
 		elif b == 'doubleQ':
-			Q_tables = [self.Q_1, self.Q_2]	
+			Q_tables = [self.Q_1, self.Q_2]
 			shuffle(Q_tables)
 			self.target = Q_tables[0]
 			self.fit = Q_tables[1]
@@ -92,11 +93,11 @@ class Q_Approx:
 		inp = self.input_batch
 		targ = self.targ_batch
 		q_vals, loss, min_score = sess.run(
-				(Q.predictions, Q.loss, Q.min_score), 
+				(Q.predictions, Q.loss, Q.min_score),
 				feed_dict={Q.input_place_holder: inp, Q.target_values: targ})
 		self.input_batch = None
 		self.targ_batch = None
-		return q_vals, loss, min_score		
+		return q_vals, loss, min_score
 
 	def calculate_target(self, sess, env, state, action, length, use_Q=None, reset=True):
 		if use_Q is None:
@@ -110,14 +111,14 @@ class Q_Approx:
 		time_unit = self.params['H']/self.params['T']
 		vol_unit = self.params['V'] / self.params['I']
 		T = self.params['T']
-		self.counter +=1 
+		self.counter +=1
 
 		i = state['inv']
 		t = state['t']
 		ts = state['ts']
 		if self.counter % 100 == 0 and b == 'sampling':
 			sess.run(self.updateTargetOperation)
-		
+
 		backup = 0
 		curr_action = action
 		tgt_price = env.mid_spread(ts + time_unit * (self.params['T']- t))
@@ -125,7 +126,7 @@ class Q_Approx:
 
 		states = []
 		rewards = []
-		trades_cost = 0 
+		trades_cost = 0
 
 		if reset:
 			if params['stateful']:
@@ -139,7 +140,7 @@ class Q_Approx:
 			old_leftover = leftover
 			if stateful:
 				curr_book = env.curr_book
-			else: 
+			else:
 				curr_book = env.get_book(ts + idx*time_unit)
 			actions = sorted(curr_book.a.keys())
 			actions.append(0)
@@ -156,7 +157,7 @@ class Q_Approx:
 				left = (1.0 * leftover / self.params['V']) if continuous else int(round(leftover / vol_unit))
 				if stateful:
 					next_book_vec = create_input_window_stateful(env, window, ob_size, t + 1, left, time_unit)
-				else: 
+				else:
 					next_book_vec = create_input_window_stateless(env, ts + time_unit, window, ob_size, t + 1, left)
 				if b == 'doubleQ':
 					action = sess.run((use_Q.min_action), feed_dict={
@@ -166,7 +167,7 @@ class Q_Approx:
 											use_Q.input_place_holder: next_book_vec
 								  })
 					argmin = next_scores[0][action]
-				else: 
+				else:
 					next_scores, argmin, action = sess.run((use_Q.predictions, use_Q.min_score, use_Q.min_action), feed_dict={
 											use_Q.input_place_holder: next_book_vec
 								  })
@@ -189,7 +190,7 @@ class Q_Approx:
 		if self.params['backup'] != 'doubleQ':
 			scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
 											self.target.input_place_holder: state})
-		else: 
+		else:
 			scores, argmin, action = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
 											self.target.input_place_holder: state})
 
@@ -348,7 +349,7 @@ def run_sampling_DQN(sess, env, agent, params):
 	window = params['window']
 	H = params['H']
 	V = params['V']
-	I = params['I']	
+	I = params['I']
 	T = params['T']
 	L = params['L']
 	S = params['S']
@@ -367,7 +368,7 @@ def run_sampling_DQN(sess, env, agent, params):
 		sample = random.randint(0, order_books - (H + 1))
 		i = V
 		t = 0
-		curr_state = create_input_window_stateless(env, sample, window, ob_size, t, i)	
+		curr_state = create_input_window_stateless(env, sample, window, ob_size, t, i)
 		env.get_timesteps(sample, sample + time_unit * T + 1, I, V)
 		while t < T:
 			scores, argmin, action = agent.predict(sess, curr_state)
@@ -377,7 +378,7 @@ def run_sampling_DQN(sess, env, agent, params):
 				a = action
 			state['inv'] = i
 			state['t'] = t
-			state['ts'] = sample 
+			state['ts'] = sample
 			backup, states, rewards, cost = agent.calculate_target(sess, env, state, a, length, reset=False)
 			costs.append(cost)
 			scores[0][a] = backup
@@ -432,7 +433,7 @@ def run_dp(sess, env, agent, params):
 					state = {}
 					state['inv'] = i * vol_unit
 					state['t'] = t
-					state['ts'] = sample 
+					state['ts'] = sample
 					backup[a], states, t_cost, cost = agent.calculate_target(sess, env, state, a, length)
 					t_costs.append(t_cost)
 				inp = states[0]
@@ -465,14 +466,29 @@ def print_stuff(q_vals, loss, inputs, targets):
 	print np.mean(loss)
 
 
-def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
-	if env is None:
-		env = Environment(ob_file,setup=False)
+def train_DQN_DP(epochs, ob_files, params, test_steps, cv_split=1, train_env=None, test_env=None):
+	# Process OB data
+	all_book_data_raw = []
+	for orderbook_file in ob_files:
+		file_stream = open(orderbook_file, 'r')
+		books = csv.reader(file_stream, delimiter=',')
+		all_book_data_raw.extend([book for book in books])
+
+	# Splice for 2-fold cross val
+	raw_data_length = len(all_book_data_raw)
+	train_data = all_book_data_raw[0:int(raw_data_length * cv_split)]
+	test_data = all_book_data_raw[0:int(raw_data_length * (1 - cv_split))]
+
+	# New envs for train and test
+	if train_env is None and test_env is None:
+		train_env = Environment(train_data, setup=False)
+		test_env = Environment(test_data, setup=False)
+
 	layers = {
 		'conv1': {
 			'type': 'conv',
 			'size': 3,
-			'stride': 1,	
+			'stride': 1,
 			'num': 100
 		},
 		'pool1': {
@@ -484,28 +500,41 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, env=None):
 		'conv2': {
 			'type': 'conv',
 			'size': 2,
-			'stride': 2,	
+			'stride': 2,
 			'num': 10
 		}
 	}
 	params['layers'] = layers
 
-	agent = Q_Approx(params) 
+	agent = Q_Approx(params)
 	init = tf.initialize_all_variables()
 	with tf.Session() as sess:
 		sess.run(init)
 		if params['backup'] == 'sampling':
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_dp(sess, env, agent, params)
-		executions = execute_algo(agent, params, sess, env, test_steps)
+			run_dp(sess, train_env, agent, params)
+		executions = execute_algo(agent, params, sess, train_env, test_steps)
 		write_trades(executions)
 
 
-	
 
-	
+
+
 if __name__ == "__main__":
+	# Get data from all files that contain string (i.e. AAPL)
+	DATA_GLOB_PREFIX = '10_GOOG'
+	# Server
+	# PATH_TO_DATA = '../../data-output-unzipped'
+	# Local
+	PATH_TO_DATA = '../data'
+
+	filelist = os.listdir(PATH_TO_DATA)
+	filtered_data_sources = [PATH_TO_DATA + '/' + item for item in filelist if DATA_GLOB_PREFIX in item]
+
+	# Train/test split - creates two environments
+	CROSS_VAL_SPLIT = 0.8
+
 	params = {
 		'backup': 'sampling',
 		'network': 'RNN',
@@ -515,15 +544,15 @@ if __name__ == "__main__":
 		'replays': 4,
 		'window': 50,
 		'ob_size': 10,
-		'hidden_size': 10, 
-		'depth': 2, 
-		'actions': 11, 
+		'hidden_size': 10,
+		'depth': 2,
+		'actions': 11,
 		'batch': 10	,
 		'continuous': True,
 		'stateful': True,
 		'rollout': 1,
 		'length': 1,
-		'H': 1000, 
+		'H': 1000,
 		'V': 10000,
 		'T': 10,
 		'I': 10,
@@ -531,6 +560,4 @@ if __name__ == "__main__":
 		'L': 10,
 		'S': 100
 	}
-	train_DQN_DP(3, '../data/10_GOOG.csv', params, 100000)
-
-	
+	train_DQN_DP(3, filtered_data_sources, params, 100000, CROSS_VAL_SPLIT)
