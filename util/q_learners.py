@@ -75,7 +75,7 @@ class Q_CNN:
 		self.target_values = tf.placeholder(tf.float32, shape=[self.params.batch, self.params.actions], name='target')
 		self.batch_losses = tf.reduce_sum(tf.squared_difference(self.predictions, self.target_values), axis=1)
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0)
-		self.trainer = tf.train.AdamOptimizer(learning_rate=0.01)
+		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
 		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
 		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
 		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))

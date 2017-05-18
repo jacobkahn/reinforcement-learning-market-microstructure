@@ -22,7 +22,7 @@ Arguments:
 '''
 
 def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=None, env=None):
-
+	print 'HI'
 	if func_approx is not None:
 		table = Q_Function(T, L, backup)
 	else:

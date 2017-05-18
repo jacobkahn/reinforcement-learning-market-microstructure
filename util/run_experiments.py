@@ -24,7 +24,7 @@ if __name__ == "__main__":
 					'buff_size': 50,
 					'replays': 5
 	}
-	ob_file = "../../test_AAPL_ob.csv"
+	ob_file = "../data/10_GOOG.csv"
 	V = 10000
 	H = 1000
 	T = 10 
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 	#samplingProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, samplingBackup, S, divs, test_steps), kwargs={'env': environment})
 	#replayBufferProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, replayBufferBackup, S, divs, test_steps), kwargs={'env': environment})
 	# start
-	#doubleQProcess.start()
+	doubleQProcess.start()
 	#samplingProcess.start()
 	#replayBufferProcess.start()
 

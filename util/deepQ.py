@@ -184,6 +184,7 @@ class Q_Approx:
 		backup += leftover * argmin
 		backup = 0 if i == 0 else (1.0* backup)/ (i)
 		rewards.append([argmin, leftover])
+		import pdb
 		return backup, states, rewards, trades_cost
 
 	def predict(self, sess, state):
@@ -370,7 +371,7 @@ def run_sampling_DQN(sess, env, agent, params):
 		t = 0
 		curr_state = create_input_window_stateless(env, sample, window, ob_size, t, i)
 		env.get_timesteps(sample, sample + time_unit * T + 1, I, V)
-		while t < T:
+		while t <= T:
 			scores, argmin, action = agent.predict(sess, curr_state)
 			if np.random.rand(1) < e:
 				a = np.array([random.randint(0, params['L'])])[0]
@@ -379,6 +380,7 @@ def run_sampling_DQN(sess, env, agent, params):
 			state['inv'] = i
 			state['t'] = t
 			state['ts'] = sample
+			import pdb
 			backup, states, rewards, cost = agent.calculate_target(sess, env, state, a, length, reset=False)
 			costs.append(cost)
 			scores[0][a] = backup
@@ -397,9 +399,9 @@ def run_sampling_DQN(sess, env, agent, params):
 				q_vals, loss, min_score = agent.update_networks(sess)
 				agent.choose_backup_networks()
 				losses.append([q_vals, loss, min_score, b_in, b_targ])
-				#print_stuff(q_vals, loss, b_in, b_targ)
+				print_stuff(agent, q_vals, loss, b_in, b_targ)
 				if len(averages) == 100:
-					print 'average reward of last 100 batches: {}'.format(np.mean(averages))
+					#print 'average reward of last 100 batches: {}'.format(np.mean(averages))
 					averages = []
 		#if ts % 1000 == 0:
 			#print ts
@@ -455,7 +457,7 @@ def run_dp(sess, env, agent, params):
 						averages = []
 	print 'Epoch Over'
 
-def print_stuff(q_vals, loss, inputs, targets):
+def print_stuff(agent, q_vals, loss, inputs, targets):
 	#print 'inputs'
 	#print inputs[0][0][-2:]
 	#print 'Q'
@@ -487,19 +489,19 @@ def train_DQN_DP(epochs, ob_files, params, test_steps, cv_split=1, train_env=Non
 	layers = {
 		'conv1': {
 			'type': 'conv',
-			'size': 3,
+			'size': 2,
 			'stride': 1,
-			'num': 100
+			'num': 10
 		},
 		'pool1': {
 			'type': 'pool',
-			'stride': 4,
+			'stride': 2,
 			'size': 5,
 			'pool_type': 'max'
 		},
 		'conv2': {
 			'type': 'conv',
-			'size': 2,
+			'size': 3,
 			'stride': 2,
 			'num': 10
 		}
@@ -513,8 +515,8 @@ def train_DQN_DP(epochs, ob_files, params, test_steps, cv_split=1, train_env=Non
 		if params['backup'] == 'sampling':
 			sess.run(agent.updateTargetOperation)
 		for i in range(epochs):
-			run_dp(sess, train_env, agent, params)
-		executions = execute_algo(agent, params, sess, train_env, test_steps)
+			run_sampling_DQN(sess, env, agent, params)
+		executions = execute_algo(agent, params, sess, env, test_steps)
 		write_trades(executions)
 
 
@@ -537,27 +539,26 @@ if __name__ == "__main__":
 
 	params = {
 		'backup': 'sampling',
-		'network': 'RNN',
+		'network': 'CNN',
 		'advantage': True,
 		'replay': True,
-		'replay_size': 100,
-		'replays': 4,
-		'window': 50,
+		'replay_size': 1000,
+		'replays': 20,
+		'window': 100,
 		'ob_size': 10,
 		'hidden_size': 10,
 		'depth': 2,
 		'actions': 11,
-		'batch': 10	,
+		'batch': 100,
 		'continuous': True,
 		'stateful': True,
-		'rollout': 1,
-		'length': 1,
-		'H': 1000,
-		'V': 10000,
+		'length': 11,
+		'H': 10000,
+		'V': 100,
 		'T': 10,
 		'I': 10,
 		'T': 10,
 		'L': 10,
-		'S': 100
+		'S': 2000
 	}
 	train_DQN_DP(3, filtered_data_sources, params, 100000, CROSS_VAL_SPLIT)
