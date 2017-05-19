@@ -93,7 +93,7 @@ class Q_Approx:
 		if reset:
 			left = (1.0 * leftover / self.params['V']) if continuous else int(round(leftover / vol_unit))
 			s = create_input_window_stateless(env, ts, window, ob_size, t, left)
-			if params['stateful']:
+			if self.params['stateful']:
 				env.get_timesteps(ts, ts + time_unit*length+ 1, self.params['I'], self.params['V'])
 			states.append(s)
 		# rollout bellman operator for multiple action steps
