@@ -448,7 +448,7 @@ def run_dp(sess, envs, agent, params):
 					q_vals, loss, min_score = agent.update_networks(sess)
 					agent.choose_backup_networks()
 					losses.append([q_vals, loss, min_score, b_in, b_targ])
-					print_stuff(agent, q_vals, loss, b_in, b_targ)
+					#print_stuff(agent, q_vals, loss, b_in, b_targ)
 					if len(averages) == 100:
 						#xprint 'average reward of last 100 batches: {}'.format(np.mean(averages))
 						averages = []
@@ -469,28 +469,6 @@ def print_stuff(agent, q_vals, loss, inputs, targets):
 def train_DQN_sampling(epochs, ob_file, params, test_steps, test_file_name='DQN-trades', envs=None, test_env=None):
 	if envs is None:
 		envs = Environment(ob_file,setup=False)
-	layers = {
-		'conv1': {
-			'type': 'conv',
-			'size': 2,
-			'stride': 1,
-			'num': 10
-		},
-		'pool1': {
-			'type': 'pool',
-			'stride': 2,
-			'size': 2,
-			'pool_type': 'max'
-		},
-		'conv2': {
-			'type': 'conv',
-			'size': 3,
-			'stride': 2,
-			'num': 10
-		}
-	}
-	params['layers'] = layers
-
 	agent = Q_Approx(params)
 	init = tf.initialize_all_variables()
 	with tf.Session() as sess:
@@ -507,27 +485,6 @@ def train_DQN_sampling(epochs, ob_file, params, test_steps, test_file_name='DQN-
 def train_DQN_DP(epochs, ob_file, params, test_steps, test_file_name='DQN-trades', envs=None, test_env=None):
 	if envs is None:
 		envs = Environment(ob_file,setup=False)
-	layers = {
-		'conv1': {
-			'type': 'conv',
-			'size': 2,
-			'stride': 1,	
-			'num': 10
-		},
-		'pool1': {
-			'type': 'pool',
-			'stride': 2,
-			'size': 2,
-			'pool_type': 'max'
-		},
-		'conv2': {
-			'type': 'conv',
-			'size': 3,
-			'stride': 2,	
-			'num': 10
-		}
-	}
-	params['layers'] = layers
 
 	agent = Q_Approx(params) 
 	init = tf.initialize_all_variables()
@@ -546,27 +503,6 @@ def train_DQN_DP(epochs, ob_file, params, test_steps, test_file_name='DQN-trades
 def train_DQN_DP_warmup(epochs, ob_file, params, test_steps, test_file_name='DQN-trades', envs=None, test_env=None):
 	if envs is None:
 		envs = Environment(ob_file,setup=False)
-	layers = {
-		'conv1': {
-			'type': 'conv',
-			'size': 2,
-			'stride': 1,	
-			'num': 10
-		},
-		'pool1': {
-			'type': 'pool',
-			'stride': 2,
-			'size': 2,
-			'pool_type': 'max'
-		},
-		'conv2': {
-			'type': 'conv',
-			'size': 3,
-			'stride': 2,	
-			'num': 100
-		}
-	}
-	params['layers'] = layers
 	S = params['S']
 	agent = Q_Approx(params) 
 	init = tf.initialize_all_variables()
@@ -613,4 +549,26 @@ if __name__ == "__main__":
 		'w_S': 1,
 		'S': 1
 	}
+	layers = {
+		'A-conv1': {
+			'type': 'conv',
+			'size': 2,
+			'stride': 1,
+			'num': 20
+		},
+		'C-pool1': {
+			'type': 'pool',
+			'stride': 2,
+			'size': 2,
+			'pool_type': 'max'
+		},
+		'B-conv2': {
+			'type': 'conv',
+			'size': 3,
+			'stride': 2,
+			'num': 30
+		}
+	}
+	params['layers'] = layers
+
 	train_DQN_DP(1, file, params, 100000)

@@ -19,7 +19,7 @@ class Q_CNN:
 			self.input_place_holder = tf.placeholder(tf.float32, shape=(None, self.params.window, self.params.ob_size * 4 + 2), name='input')
 			curr_dimension = [tf.shape(self.input_place_holder)[0], self.params.window, self.params.ob_size * 4 + 2, 1]
 			curr_layer = tf.reshape(self.input_place_holder, curr_dimension)
-			for name, layer_params in self.layers.items():
+			for name, layer_params in sorted(self.layers.items()):
 				print curr_dimension
 				print curr_layer 
 				if layer_params['type'] == 'conv':

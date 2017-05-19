@@ -46,13 +46,13 @@ if __name__ == "__main__":
 	}
 	ob_file = "../data/10_GOOG.csv"
 	V = 10000
-	H = 1000
-	T = 10 
-	I = 10
+	H = 10000
+	T = 2 
+	I = 2
 	w_S = 1
-	S = 1
+	S = 10
 	L = 5
-	window = 10
+	window = 50
 	ob_size = L
 	hidden_size = 5
 	depth = 2
@@ -68,8 +68,8 @@ if __name__ == "__main__":
 		'network': 'CNN',
 		'advantage': True,
 		'replay': True,
-		'replay_size': 10,
-		'replays': 0,
+		'replay_size': 1000,
+		'replays': 10,
 		'window': window,
 		'ob_size': ob_size,
 		'hidden_size': hidden_size, 
@@ -88,6 +88,28 @@ if __name__ == "__main__":
 		'w_S': w_S,
 		'L': L
 	}
+
+	layers = {
+		'A-conv1': {
+			'type': 'conv',
+			'size': 2,
+			'stride': 1,
+			'num': 30
+		},
+		'C-pool1': {
+			'type': 'pool',
+			'stride': 2,
+			'size': 2,
+			'pool_type': 'max'
+		},
+		'B-conv2': {
+			'type': 'conv',
+			'size': 3,
+			'stride': 2,
+			'num': 20
+		}
+	}
+	params['layers'] = layers
 
 	# tables
 	doubleQProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, doubleQbackup, S, divs, test_steps), kwargs={'envs': envs, 'test_env':test_env})
@@ -108,6 +130,22 @@ if __name__ == "__main__":
 	#func_replayBufferProcess.start()
 
 	# deep learning
-	#DQN_process = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, H, V, I, T, L, S, test_steps, rnn_params), kwargs={'env': environment})
+	params['network'] = 'RNN'
+	RNN_DQN_process_dp = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+	params['network'] = 'CNN'
+	CNN_DQN_process_dp = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env}
+
+	params['network'] = 'RNN'
+	RNN_DQN_process_warmup = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+	params['network'] = 'CNN'
+	CNN_DQN_process_warmup = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+
 	# start
-	#DQN_process.start()
+	RNN_DQN_process_dp.start()
+	CNN_DQN_process_dp.start()
+	RNN_DQN_process_warmup.start()
+	CNN_DQN_process_warmup.start()
+
+
+
+
