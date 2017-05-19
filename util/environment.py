@@ -6,7 +6,7 @@ import csv
 def num(l):
 	return [int(x) for x in l]
 
-
+	
 
 class Environment:
 
@@ -15,6 +15,8 @@ class Environment:
 		books = csv.reader(file_stream, delimiter=',')
 		self.books = [book for book in books]
 		self.books = self.books[1:]
+		if time:
+			self.books = [book[1:] for book in books]
 		self.lookback = []
 		self.time = time
 		self.window	= window
@@ -31,16 +33,10 @@ class Environment:
 	def get_book(self, t):
 		t = max(t,0)
 		book = self.books[t]
-		if not self.time:	
-			ask_prices = num(book[0::4])
-			ask_volumes = num(book[1::4])
-			bid_prices = num(book[2::4])
-			bid_volumes = num(book[3::4])
-		else:
-			ask_prices = num(book[1::4])
-			ask_volumes = num(book[2::4])
-			bid_prices = num(book[3::4])
-			bid_volumes = num(book[4::4])
+		ask_prices = num(book[0::4])
+		ask_volumes = num(book[1::4])
+		bid_prices = num(book[2::4])
+		bid_volumes = num(book[3::4])
 		ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 		self.curr_book = ob
 		return ob
