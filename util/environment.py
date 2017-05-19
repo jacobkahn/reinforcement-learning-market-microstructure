@@ -16,7 +16,7 @@ class Environment:
 		self.books = [book for book in books]
 		self.books = self.books[1:]
 		if time:
-			self.books = [book[1:] for book in books]
+			self.books = [book[1:] for book in self.books]
 		self.lookback = []
 		self.time = time
 		self.window	= window
