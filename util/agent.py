@@ -40,15 +40,19 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 	vol_unit = V/I
 	volume_misbalance = 0
 
-	vols = env.get_timesteps(0, S+1, I, V)
 
 	if isinstance(envs, dict):
 		days = envs.keys()
-		day = random.choice(env)
-		env = envs[day]
+		dividers = {}
+		for day in days:
+			env = envs[day]
+			vols = env.get_timesteps(0, S+1, I, V)
+			spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
+			dividers[day] = (vols, spreads, misbalances, imm_costs, signed_vols)
 	else:
 		env = envs
-	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
+		vols = env.get_timesteps(0, S+1, I, V)
+		spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
 
 	
 	# loop for the DP algorithm
@@ -59,6 +63,7 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 				days = envs.keys()
 				day = random.choice(env)
 				env = envs[day]
+				vols, spreads, misbalances, imm_costs, signed_vols = dividers[day]
 			else:
 				env = envs
 			if ts % 1000 == 0:
