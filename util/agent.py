@@ -186,7 +186,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances, imm_costs,
 	decisions = steps / time_unit - 1
 	for x in range(10):
 		offset = random.randint(0, time_unit - 1)
-		for ts in range(x, decisions+1):
+		for ts in range(0, decisions+1):
 			# regenerate orderbook simulation for the next time horizon of decisions
 			if ts % (T+1) == 0:
 				env.get_timesteps(ts*time_unit + offset, ts*time_unit+T*time_unit+ offset + 1, T, V)

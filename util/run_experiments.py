@@ -29,7 +29,7 @@ if __name__ == "__main__":
 	# Server
 	PATH_TO_DATA = '../../data-output-unzipped'
 	# Local
-	PATH_TO_DATA = '../data'
+	#PATH_TO_DATA = '../data'
 	# define method Paramsms'
 	envs, test_env = produce_envs(TICKER, PATH_TO_DATA)
 

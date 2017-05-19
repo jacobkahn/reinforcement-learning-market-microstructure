@@ -147,7 +147,7 @@ class Q_Approx:
 			# use offline network to predict argmin value
 			scores, _, _ = sess.run((self.target.predictions, self.target.min_score, self.target.min_action), feed_dict={
 											self.target.input_place_holder: state})
-			argmin = scores_1[0][action]
+			argmin = scores[0][action]
 		return scores, argmin, action
 
 	def predict(self, sess, state):
