@@ -51,7 +51,7 @@ if __name__ == "__main__":
 	I = 10
 	w_S = 1
 	S = 1
-	L = 10
+	L = 5
 	window = 10
 	ob_size = L
 	hidden_size = 5
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 	epochs = 3
 	continuous = True
 	stateful = True
-	test_steps = 100000
+	test_steps = len(test_env.books) - H - 1
 	divs = 10
 	params = {
 		'backup': 'sampling',
