@@ -29,7 +29,7 @@ if __name__ == "__main__":
 	# Server
 	PATH_TO_DATA = '../../data-output-unzipped'
 	# Local
-	# PATH_TO_DATA = '../data'
+	PATH_TO_DATA = '../data'
 	# define method Paramsms'
 	envs, test_env = produce_envs(TICKER, PATH_TO_DATA)
 
@@ -47,29 +47,29 @@ if __name__ == "__main__":
 	ob_file = "../data/10_GOOG.csv"
 	V = 10000
 	H = 10000
-	T = 2 
+	T = 2
 	I = 2
 	w_S = 1
-	S = 10
+	S = 1
 	L = 5
 	window = 50
 	ob_size = L
 	hidden_size = 5
 	depth = 2
 	actions = L + 1
-	batch = 1
-	epochs = 3
+	batch = 1000
+	epochs = 1
 	continuous = True
 	stateful = True
 	test_steps = len(test_env.books) - H - 1
 	divs = 10
 	params = {
-		'backup': 'sampling',
+		'backup': 'doubleQ',
 		'network': 'CNN',
 		'advantage': True,
 		'replay': True,
-		'replay_size': 1000,
-		'replays': 10,
+		'replay_size': 2000,
+		'replays': 0,
 		'window': window,
 		'ob_size': ob_size,
 		'hidden_size': hidden_size, 

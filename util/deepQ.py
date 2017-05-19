@@ -78,7 +78,7 @@ class Q_Approx:
 		t = state['t']
 		ts = state['ts']
 
-		if self.counter % batch * 5 == 0:
+		if self.counter % (batch * 5) == 0:
 			sess.run(self.updateTargetOperation)
 
 		backup = 0
@@ -258,48 +258,49 @@ def execute_algo(agent, params, session, env, steps):
 	# number of timesteps in between decisions
 	time_unit = H/T
 	# number of decisions possible during test steps set
-	decisions = steps / time_unit
+	decisions = steps / time_unit - 1
+	for x in range(10):
+		offset = random.randint(0, time_unit - 1)
+		for ts in range(0, decisions+1):
+			# update the state of the algorithm based on the current book and timestep
+			rounded_unit = 1.0 * volume / vol_unit
+			t_left =  ts % (T + 1)
+			# regenerate orderbook simulation for the next time horizon of decisions
 
-	for ts in range(0, decisions+1):
-		# update the state of the algorithm based on the current book and timestep
-		rounded_unit = 1.0 * volume / vol_unit
-		t_left =  ts % (T + 1)
-		# regenerate orderbook simulation for the next time horizon of decisions
-
-		if ts % (T+1) == 0:
-			env.get_timesteps(ts*time_unit, ts*time_unit+T*time_unit+window+1, T, V)
-			volume = V
-		if ts % (T + 1) != 0:
-			for i in range(0, time_unit - window):
-				env.get_next_state()
-		input_book = create_input_window_test(env, 	window, ob_size, rounded_unit, t_left)
-		curr_book = env.curr_book
-		spread = compute_bid_ask_spread(curr_book, spreads)
-		volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)
-		immediate_cost = compute_imm_cost(curr_book, volume, imm_costs)
-		signed_vol = compute_signed_vol(env.running_vol, signed_vols)
-		# ideal price is mid-spread end of the period
-		perfect_price = env.mid_spread(ts*time_unit + time_unit * (T- t_left))
-		actions = sorted(curr_book.a.keys())
-		actions.append(0)
-		# compute and execute the next action using the table
-		scores, argmin, min_action = agent.predict(session, input_book)
-		paid, leftover = env.limit_order(0, actions[min_action], volume)
-		print min_action
-		# if we are at the last time step, have to submit everything remaining to OB
-		if t_left == T:
-			additional_spent, overflow = env.limit_order(0, float("inf"), leftover)
-			paid += overflow * actions[-2] + additional_spent
-			leftover = 0
-		if leftover == volume:
-			reward = [t_left, rounded_unit, spread, volume_misbalance, min_action, 'no trade ', 0]
-		else:
-			price_paid = paid / (volume - leftover)
-			basis_p = (float(price_paid) - perfect_price)/perfect_price * 100
-			reward = [t_left, rounded_unit, spread, volume_misbalance, immediate_cost, signed_vol, min_action, basis_p, volume - leftover]
-			print str(perfect_price) + ' ' + str(price_paid)
-		executions.append(reward)
-		volume = leftover
+			if ts % (T+1) == 0:
+				env.get_timesteps(ts*time_unit + offset, ts*time_unit+T*time_unit+window+offset+1, T, V)
+				volume = V
+			if ts % (T + 1) != 0:
+				for i in range(0, time_unit - window):
+					env.get_next_state()
+			input_book = create_input_window_test(env, 	window, ob_size, rounded_unit, t_left)
+			curr_book = env.curr_book
+			spread = compute_bid_ask_spread(curr_book, spreads)
+			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)
+			immediate_cost = compute_imm_cost(curr_book, volume, imm_costs)
+			signed_vol = compute_signed_vol(env.running_vol, signed_vols)
+			# ideal price is mid-spread end of the period
+			perfect_price = env.mid_spread(ts*time_unit + time_unit * (T- t_left))
+			actions = sorted(curr_book.a.keys())
+			actions.append(0)
+			# compute and execute the next action using the table
+			scores, argmin, min_action = agent.predict(session, input_book)
+			paid, leftover = env.limit_order(0, actions[min_action], volume)
+			print min_action
+			# if we are at the last time step, have to submit everything remaining to OB
+			if t_left == T:
+				additional_spent, overflow = env.limit_order(0, float("inf"), leftover)
+				paid += overflow * actions[-2] + additional_spent
+				leftover = 0
+			if leftover == volume:
+				reward = [t_left, rounded_unit, spread, volume_misbalance, min_action, 'no trade ', 0]
+			else:
+				price_paid = paid / (volume - leftover)
+				basis_p = (float(price_paid) - perfect_price)/perfect_price * 100
+				reward = [t_left, rounded_unit, spread, volume_misbalance, immediate_cost, signed_vol, min_action, basis_p, volume - leftover]
+				print str(perfect_price) + ' ' + str(price_paid)
+			executions.append(reward)
+			volume = leftover
 	return executions
 
 def write_trades(executions, tradesOutputFilename="DQN"):
@@ -346,9 +347,7 @@ def run_sampling_DQN(sess, envs, agent, params):
 			if np.random.rand(1) < epsilon:
 				a = np.array([random.randint(0, params['L'])])[0]
 			else:
-				print 'policy'
 				a = action
-			print a
 			state['inv'] = i
 			state['t'] = t
 			state['ts'] = sample + t *time_unit
@@ -370,7 +369,7 @@ def run_sampling_DQN(sess, envs, agent, params):
 				diffs.append(loss)
 				agent.choose_backup_networks()
 				losses.append([q_vals, loss, min_score, b_in, b_targ])
-				print_stuff(agent, q_vals, loss, b_in, b_targ)
+				#print_stuff(agent, q_vals, loss, b_in, b_targ)
 				if len(diffs) == 100:
 					print np.mean(diffs)
 					print np.mean(averages)
