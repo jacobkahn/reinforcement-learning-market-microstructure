@@ -43,9 +43,11 @@ class Environment:
 
 	# generates the correct environment from timesteps start to end-1
 	def get_timesteps(self, start, end, I, V, window=10):
-		if start < 0 or end > len(self.books):
+		if start < 0:
 			print "Timesteps out of bounds!"
 			return
+		if end > len(self.books):
+			end = len(self.books)
 		self.window = window
 		self.v_b = []
 
