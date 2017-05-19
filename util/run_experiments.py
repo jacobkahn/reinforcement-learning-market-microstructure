@@ -50,7 +50,7 @@ if __name__ == "__main__":
 	T = 15
 	I = 15
 	w_S = 5000
-	S = 100000
+	S = 50000
 	L = 5
 	window = 50
 	ob_size = L
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 	depth = 2
 	actions = L + 1
 	batch = 100
-	epochs = 1
+	epochs = 3
 	continuous = True
 	stateful = True
 	test_steps = len(test_env.books) - H - 1
