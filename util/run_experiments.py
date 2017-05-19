@@ -89,7 +89,6 @@ if __name__ == "__main__":
 		'L': L
 	}
 
-	dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=None, envs=None, test_env=None)
 	# tables
 	doubleQProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, doubleQbackup, S, divs, test_steps), kwargs={'envs': envs, 'test_env':test_env})
 	samplingProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, samplingBackup, S, divs, test_steps), kwargs={'envs': envs, 'test_env':test_env})

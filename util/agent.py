@@ -29,7 +29,6 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 		table = Q(T,L, backup)
 	if envs is None:
 		envs = Environment(ob_file, setup=False)
-	all_books = len(env.books)
 	steps = H / T
 	# number of timesteps in between decisions
 	time_unit = H/T
@@ -42,6 +41,13 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 	volume_misbalance = 0
 
 	vols = env.get_timesteps(0, S+1, I, V)
+
+	if isinstance(envs, dict):
+		days = envs.keys()
+		day = random.choice(env)
+		env = envs[day]
+	else:
+		env = envs
 	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
 
 	
