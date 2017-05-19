@@ -61,7 +61,7 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 		for ts in range(0, S):
 			if isinstance(envs, dict):
 				days = envs.keys()
-				day = random.choice(env)
+				day = random.choice(days)
 				env = envs[day]
 				vols, spreads, misbalances, imm_costs, signed_vols = dividers[day]
 			else:

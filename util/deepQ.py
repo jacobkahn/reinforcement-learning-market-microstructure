@@ -346,7 +346,7 @@ def run_sampling_DQN(sess, envs, agent, params):
 	for ts in range(11, S+11):
 		if isinstance(envs, dict):
 			days = envs.keys()
-			day = random.choice(env)
+			day = random.choice(days)
 			env = envs[day]
 		else:
 			env = envs
@@ -416,7 +416,7 @@ def run_dp(sess, envs, agent, params):
 	for ts in range(1, S+1):
 		if isinstance(envs, dict):
 			days = envs.keys()
-			day = random.choice(env)
+			day = random.choice(days)
 			env = envs[day]
 		else:
 			env = envs
