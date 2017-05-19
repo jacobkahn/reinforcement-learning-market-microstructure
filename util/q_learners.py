@@ -1,6 +1,17 @@
 from deepQ import *
 
 
+
+class Params:
+	def __init__(self, window, ob_size, hidden_size, depth, actions, batch):
+		self.window = window
+		self.ob_size = ob_size
+		self.hidden_size = hidden_size
+		self.hidden_depth = depth
+		self.actions = actions
+		self.batch = batch
+
+		
 class Q_CNN: 
 
 	def __init__(self, params, name):

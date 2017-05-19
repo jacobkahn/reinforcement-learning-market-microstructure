@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from environment import *
+from q_learners import *
 from collections import defaultdict
 from deepQ import *
 from Q import *
