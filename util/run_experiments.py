@@ -132,14 +132,14 @@ if __name__ == "__main__":
 
 	# deep learning
 	params['network'] = 'RNN'
-	RNN_DQN_process_dp = multiprocess.Process(target=train_DQN_DP, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+	RNN_DQN_process_dp = multiprocess.Process(target=train_DQN_DP, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env, test_file_name:'RNN_DP-trades'})
 	params['network'] = 'CNN'
-	CNN_DQN_process_dp = multiprocess.Process(target=train_DQN_DP, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+	CNN_DQN_process_dp = multiprocess.Process(target=train_DQN_DP, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env, test_file_name:'CNN_DP-trades'})
 
 	params['network'] = 'RNN'
-	RNN_DQN_process_warmup = multiprocess.Process(target=train_DQN_DP_warmup, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+	RNN_DQN_process_warmup = multiprocess.Process(target=train_DQN_DP_warmup, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env, test_file_name:'RNN_warmup-trades'})
 	params['network'] = 'CNN'
-	CNN_DQN_process_warmup = multiprocess.Process(target=train_DQN_DP_warmup, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
+	CNN_DQN_process_warmup = multiprocess.Process(target=train_DQN_DP_warmup, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env, test_file_name:'CNN_warmup-trades'})
 
 	# start
 	RNN_DQN_process_dp.start()

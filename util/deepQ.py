@@ -1,6 +1,8 @@
 from environment import *
 from agent import *
-from q_learners import *
+from q_learners import Q_CNN
+from q_learners import Q_RNN
+from q_learners import Params
 from collections import defaultdict
 from random import shuffle
 import tensorflow as tf
@@ -9,14 +11,6 @@ import csv
 import os
 
 
-class Params:
-	def __init__(self, window, ob_size, hidden_size, depth, actions, batch):
-		self.window = window
-		self.ob_size = ob_size
-		self.hidden_size = hidden_size
-		self.hidden_depth = depth
-		self.actions = actions
-		self.batch = batch
 
 class Q_Approx:
 	def __init__(self, params):
@@ -30,9 +24,9 @@ class Q_Approx:
 		self.input_batch = None
 		self.targ_batch = None
 		self.counter = 0
-
-		self.Q = self.create_network(a, params, 'Q')
-		self.Q_target = self.create_network(a, params, 'Q_target')
+		n = ''.join(random.choice('abcdefhgijklmnop') for _ in range(15))
+		self.Q = self.create_network(a, params, 'Q-' + n)
+		self.Q_target = self.create_network(a, params, 'Q_target-' + n)
 		self.buff = []
 		self.updateTargetOperation = self.Q_target.copy_Q_Op(self.Q)
 		self.choose_backup_networks()
@@ -215,15 +209,6 @@ class Q_Approx:
 # class A3C:
 
 
-def compute_pool_size(b, h, w, psize, stride, k):
-	W_2 = (w - psize)/stride + 1
-	H_2 = (h - psize)/stride + 1
-	return [b, H_2, W_2, k]
-
-def compute_output_size(b, h, w, fsize, stride, padding, k):
-	W_2 = (w - fsize + 2 * padding)/ stride + 1
-	H_2 = (h - fsize + 2 * padding)/ stride + 1
-	return [b, H_2, W_2, k]
 
 
 def create_input_window_test(env, window, ob_size, t, i):
@@ -378,7 +363,6 @@ def run_sampling_DQN(sess, envs, agent, params):
 			curr_state = states[-1]
 			if agent.batch_ready():
 				averages.append(np.mean(costs))
-				#print np.mean(costs)
 				costs = []
 				b_in = agent.input_batch
 				b_targ = agent.targ_batch
@@ -386,14 +370,12 @@ def run_sampling_DQN(sess, envs, agent, params):
 				diffs.append(loss)
 				agent.choose_backup_networks()
 				losses.append([q_vals, loss, min_score, b_in, b_targ])
-				#print 'action: {}'.format(a)
 				print_stuff(agent, q_vals, loss, b_in, b_targ)
 				if len(diffs) == 100:
 					print np.mean(diffs)
+					print np.mean(averages)
 					diffs = []
 					averages = []
-		#if ts % 1000 == 0:
-			#print ts
 	print 'Epoch Over'
 
 def run_dp(sess, envs, agent, params):
@@ -407,8 +389,7 @@ def run_dp(sess, envs, agent, params):
 	S = params['S']
 	length = params['length']
 	losses = []
-	averages = []
-	costs = []
+	diffs = []
 	vol_unit = V / I
 	time_unit = H / T
 	agent.choose_backup_networks()
@@ -439,19 +420,16 @@ def run_dp(sess, envs, agent, params):
 				inp = states[0]
 				agent.submit_to_batch(sess, inp, range(L+1), t_costs, next_states)
 				if agent.batch_ready():
-					averages.append(np.mean(costs))
-					#print np.mean(costs)
-					costs = []
-					#print '{},{}'.format(t, i)
 					b_in = agent.input_batch
 					b_targ = agent.targ_batch
 					q_vals, loss, min_score = agent.update_networks(sess)
 					agent.choose_backup_networks()
+					diffs.append(loss)
 					losses.append([q_vals, loss, min_score, b_in, b_targ])
-					#print_stuff(agent, q_vals, loss, b_in, b_targ)
-					if len(averages) == 100:
-						#xprint 'average reward of last 100 batches: {}'.format(np.mean(averages))
-						averages = []
+					# print_stuff(agent, q_vals, loss, b_in, b_targ)
+					if len(diffs) == 10:
+						print np.mean(diffs)
+						diffs = []
 	print 'Epoch Over'
 
 def print_stuff(agent, q_vals, loss, inputs, targets):
@@ -530,7 +508,7 @@ if __name__ == "__main__":
 		'advantage': True,
 		'replay': True,
 		'replay_size': 10,
-		'replays': 0,
+		'replays': 10,
 		'window': 10,
 		'ob_size': 10,
 		'hidden_size': 10, 

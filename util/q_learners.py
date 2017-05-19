@@ -1,5 +1,5 @@
-from deepQ import *
-
+import tensorflow as tf
+import numpy as np
 
 
 class Params:
@@ -11,7 +11,18 @@ class Params:
 		self.actions = actions
 		self.batch = batch
 
-		
+
+
+def compute_pool_size(b, h, w, psize, stride, k):
+	W_2 = (w - psize)/stride + 1
+	H_2 = (h - psize)/stride + 1
+	return [b, H_2, W_2, k]
+
+def compute_output_size(b, h, w, fsize, stride, padding, k):
+	W_2 = (w - fsize + 2 * padding)/ stride + 1
+	H_2 = (h - fsize + 2 * padding)/ stride + 1
+	return [b, H_2, W_2, k]
+
 class Q_CNN: 
 
 	def __init__(self, params, name):
