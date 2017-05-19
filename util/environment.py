@@ -8,8 +8,6 @@ def num(l):
 
 
 
-
-
 class Environment:
 
 	def __init__(self, orderbook_file, setup=True, window = 100, time=False):
@@ -81,7 +79,7 @@ class Environment:
 			ask_prices = num(book[0::4])
 			ask_volumes = num(book[1::4])
 			bid_prices = num(book[2::4])
-			bid_volumes = num(book[3::4])	
+			bid_volumes = num(book[3::4])
 			if len(self.time_steps) > 0:
 				ob, n_v = curr_book.diff(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				ob.set_s_vol(n_v)
@@ -113,7 +111,7 @@ class Environment:
 			self.min_spread = self.min_spread if self.min_spread < s else s
 			self.max_misbalance = self.max_misbalance if self.max_misbalance > m else m
 			self.min_misbalance = self.min_misbalance if self.min_misbalance < m else m
-			for j in range(0, 2): 
+			for j in range(0, 2):
 				u = 0 if j is 0 else I
 				im = curr_book.immediate_cost_buy(vol_units*u + 1)
 				self.max_imm_cost = self.max_imm_cost if self.max_imm_cost > im else im
@@ -158,7 +156,7 @@ class Environment:
 				self.curr_book.apply_diff(self.time_steps[self.current_timestep])
 
 			self.current_timestep += 1
-			return self.curr_book 
+			return self.curr_book
 
 
 	# returns total price paid or received and volume left
@@ -211,9 +209,9 @@ class OrderBook:
 	'''
 	Assumes this is orderbook at step t, takes info for step t+1,
 	creates a new order book with the additional or fewer shares now offered
-	at existing price levels as well as quantities at new prices levels. 
-	Generated BEFORE orders are submitted by the agent: these are the 
-	actual changes from the market. 
+	at existing price levels as well as quantities at new prices levels.
+	Generated BEFORE orders are submitted by the agent: these are the
+	actual changes from the market.
 	'''
 	def diff(self, asks, ask_vols, bids, bid_vols):
 		net_vol = 0
@@ -237,14 +235,14 @@ class OrderBook:
 				new_b.append(bids[i])
 				new_bv.append(bid_vols[i])
 		return OrderBook(new_a, new_av, new_b, new_bv), net_vol
-		 
+
 	'''
 	Takes difference orderbook and applies it to this one.
 	Allows agent's orders to be processed without losing the actual
 	changes in the market between the order books -- UNDER CONSTRUCTION
 	Idea is: if we already ordered everything at some current existing price, it
 	is no longer available to order in our books! All we do when we move timesteps
-	is observe any new potential prices levels or changes in levels and add them to our book. 
+	is observe any new potential prices levels or changes in levels and add them to our book.
 	If an old price level is no longer offered by the market at next step, we clean it out too.
 	'''
 	def apply_diff(self, ob_next):
@@ -285,13 +283,13 @@ class OrderBook:
 		# add proper error handling eventually
 		# 0 is buy, 1 is sell
 		if side == 0:
-			if price in self.a: 
+			if price in self.a:
 				ret = max(0, volume - self.a[price])
 				self.a[price] = max(self.a[price] - volume, 0)
 				return ret
 			return -1
 		elif side == 1:
-			if price in self.b: 
+			if price in self.b:
 				ret = max(0, volume - self.b[price])
 				self.b[price] = max(self.b[price] - volume, 0)
 				return ret
@@ -299,7 +297,7 @@ class OrderBook:
 		else:
 			print "Invalid side code - OrderBook.order"
 			return -2
-			
+
 	def vectorize_book(self, price_levels, time, inv):
 		ret = np.zeros(shape=[price_levels * 4 + 2])
 		row = 0
@@ -324,4 +322,3 @@ class OrderBook:
 		row += 1
 		ret[row] = inv
 		return ret
-

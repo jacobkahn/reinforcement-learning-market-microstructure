@@ -21,14 +21,14 @@ Arguments:
 
 '''
 
-def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=None, env=None):
+def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=None, envs=None, test_env=None):
 	print 'HI'
 	if func_approx is not None:
 		table = Q_Function(T, L, backup)
 	else:
 		table = Q(T,L, backup)
-	if env is None:
-		env = Environment(ob_file, setup=False)
+	if envs is None:
+		envs = Environment(ob_file, setup=False)
 	all_books = len(env.books)
 	steps = H / T
 	# number of timesteps in between decisions
@@ -44,11 +44,17 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 	vols = env.get_timesteps(0, S+1, I, V)
 	spreads, misbalances, imm_costs, signed_vols = create_variable_divs(divs, env)
 
-
+	
 	# loop for the DP algorithm
 	for t in range(0, T+1)[::-1]:
 		print t
 		for ts in range(0, S):
+			if isinstance(envs, dict):
+				days = envs.keys()
+				day = random.choice(env)
+				env = envs[day]
+			else:
+				env = envs
 			if ts % 1000 == 0:
 				print ts
 			tgt_price = env.mid_spread(ts + time_unit * (T- t))
@@ -64,7 +70,9 @@ def dp_algo(ob_file, H, V, I, T, L, backup, S, divs, test_steps, func_approx=Non
 					curr_book = env.get_book(ts)
 					immediate_cost = compute_imm_cost(curr_book, i*vol_unit, imm_costs)
 					table.update_table_buy(t, i, vol_unit, spread, volume_misbalance, immediate_cost, signed_vol, action, actions, env, tgt_price)
-	executions = execute_algo(table, env, H, V, I, T, test_steps, spreads, misbalances, imm_costs, signed_vols)
+	if test_env is None:
+		test_env = envs
+	executions = execute_algo(table, test_env, H, V, I, T, test_steps, spreads, misbalances, imm_costs, signed_vols)
 	process_output(table, func_approx, executions, T, L)
 
 
