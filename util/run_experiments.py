@@ -47,17 +47,17 @@ if __name__ == "__main__":
 	ob_file = "../data/10_GOOG.csv"
 	V = 10000
 	H = 10000
-	T = 2
-	I = 2
-	w_S = 1
-	S = 1
+	T = 15
+	I = 15
+	w_S = 5000
+	S = 100000
 	L = 5
 	window = 50
 	ob_size = L
-	hidden_size = 5
+	hidden_size = 20
 	depth = 2
 	actions = L + 1
-	batch = 1000
+	batch = 100
 	epochs = 1
 	continuous = True
 	stateful = True
@@ -69,7 +69,7 @@ if __name__ == "__main__":
 		'advantage': True,
 		'replay': True,
 		'replay_size': 2000,
-		'replays': 0,
+		'replays': 50,
 		'window': window,
 		'ob_size': ob_size,
 		'hidden_size': hidden_size, 
