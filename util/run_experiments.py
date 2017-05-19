@@ -43,6 +43,12 @@ if __name__ == "__main__":
 	test_steps = 100000
 	divs = 10
 	params = {
+		'backup': 'sampling',
+		'network': 'CNN',
+		'advantage': True,
+		'replay': True,
+		'replay_size': 10,
+		'replays': 0,
 		'window': window,
 		'ob_size': ob_size,
 		'hidden_size': hidden_size, 
@@ -51,6 +57,7 @@ if __name__ == "__main__":
 		'batch': batch,
 		'continuous': continuous,
 		'stateful': stateful,
+		'length': 1,
 		'H': H, 
 		'V': V,
 		'T': T,

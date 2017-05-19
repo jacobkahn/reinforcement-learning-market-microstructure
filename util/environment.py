@@ -7,13 +7,18 @@ def num(l):
 	return [int(x) for x in l]
 
 
+
+
+
 class Environment:
 
-	def __init__(self, orderbook_file, setup=True, window = 100):
+	def __init__(self, orderbook_file, setup=True, window = 100, time=False):
 		file_stream = open(orderbook_file, 'r')
 		books = csv.reader(file_stream, delimiter=',')
 		self.books = [book for book in books]
+		self.books = self.books[1:]
 		self.lookback = []
+		self.time = time
 		self.window	= window
 		if setup:
 			self.get_timesteps(0, len(self.books))
@@ -28,10 +33,16 @@ class Environment:
 	def get_book(self, t):
 		t = max(t,0)
 		book = self.books[t]
-		ask_prices = num(book[0::4])
-		ask_volumes = num(book[1::4])
-		bid_prices = num(book[2::4])
-		bid_volumes = num(book[3::4])
+		if not self.time:	
+			ask_prices = num(book[0::4])
+			ask_volumes = num(book[1::4])
+			bid_prices = num(book[2::4])
+			bid_volumes = num(book[3::4])
+		else:
+			ask_prices = num(book[1::4])
+			ask_volumes = num(book[2::4])
+			bid_prices = num(book[3::4])
+			bid_volumes = num(book[4::4])
 		ob = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 		self.curr_book = ob
 		return ob
@@ -292,12 +303,19 @@ class OrderBook:
 	def vectorize_book(self, price_levels, time, inv):
 		ret = np.zeros(shape=[price_levels * 4 + 2])
 		row = 0
-		for price, volume in self.a.items():
+		a_prices = self.a.keys()
+		a_prices.sort(key=int)
+		b_prices = self.b.keys()
+		b_prices.sort(key=int)
+		b_prices.reverse()
+		for price in a_prices:
+			volume = self.a[price]
 			ret[row] = 1.0*price/10000000
 			row += 1
 			ret[row] = 1.0*volume/1000
-			row += 1
-		for price, volume in self.b.items():
+			row += 1	
+		for price in b_prices:
+			volume = self.b[price]
 			ret[row] = 1.0*price/10000000
 			row += 1
 			ret[row] = 1.0*volume/1000

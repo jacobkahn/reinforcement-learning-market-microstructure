@@ -26,7 +26,7 @@ class Q_CNN:
 					n = 'conv_{}_filter_size_{}_stride_{}_num_{}'.format(name, layer_params['size'], layer_params['stride'], layer_params['num'])
 					s = [layer_params['size'], layer_params['size'], curr_dimension[3], layer_params['num']]
 					strides = [1, layer_params['stride'], layer_params['stride'], 1]
-					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.1), name=n)
+					self.filter_tensors[name] = tf.Variable(tf.truncated_normal(s, stddev=0.0001), name=n)
 					self.bias_tensors[name] = tf.Variable(tf.truncated_normal(shape=[layer_params['num']], stddev=0.1), name=n + '_bias')
 					conv_output = tf.nn.conv2d(curr_layer, self.filter_tensors[name], strides, "VALID")
 					conv_bias = tf.nn.bias_add(conv_output, self.bias_tensors[name])
@@ -61,8 +61,8 @@ class Q_CNN:
 				final_s_a = [curr_dimension[1], curr_dimension[2], curr_dimension[3]/2, self.params.actions]
 				final_s_v = [curr_dimension[1], curr_dimension[2], curr_dimension[3]/2, 1]
 				strides = [1,1,1,1]
-				self.projection_a = tf.Variable(tf.truncated_normal(final_s_a, stddev=0.1), name="final_projection")
-				self.projection_v = tf.Variable(tf.truncated_normal(final_s_v, stddev=0.1), name="final_projection")
+				self.projection_a = tf.Variable(tf.truncated_normal(final_s_a, stddev=0.01), name="final_projection")
+				self.projection_v = tf.Variable(tf.truncated_normal(final_s_v, stddev=0.01), name="final_projection")
 				self.A = tf.squeeze(tf.nn.conv2d(self.advantage_stream, self.projection_a, strides, 'VALID'), squeeze_dims=[1,2])
 				self.V = tf.squeeze(tf.nn.conv2d(self.value_stream, self.projection_v, strides, 'VALID'), squeeze_dims=[1,2])
 				self.predictions = self.V + tf.subtract(self.A, tf.reduce_mean(self.A, axis=1, keep_dims=True))
@@ -77,7 +77,7 @@ class Q_CNN:
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0)
 		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
 		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
-		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
+		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 20.0)
 		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
 
 	def copy_Q_Op(self, Q):
@@ -127,7 +127,7 @@ class Q_RNN:
 		self.loss = tf.reduce_sum(self.batch_losses, axis=0)
 		self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
 		self.gvs, self.variables = zip(*self.trainer.compute_gradients(self.loss))
-		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 5.0)
+		self.clipped_gradients, _ = tf.clip_by_global_norm(self.gvs, 20.0)
 		self.updateWeights = self.trainer.apply_gradients(zip(self.clipped_gradients, self.variables))
 
 	def copy_Q_Op(self, Q):
