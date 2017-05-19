@@ -133,7 +133,7 @@ if __name__ == "__main__":
 	params['network'] = 'RNN'
 	RNN_DQN_process_dp = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
 	params['network'] = 'CNN'
-	CNN_DQN_process_dp = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env}
+	CNN_DQN_process_dp = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
 
 	params['network'] = 'RNN'
 	RNN_DQN_process_warmup = multiprocess.Process(target=train_DQN, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env})
@@ -144,7 +144,7 @@ if __name__ == "__main__":
 	RNN_DQN_process_dp.start()
 	CNN_DQN_process_dp.start()
 	RNN_DQN_process_warmup.start()
-	CNN_DQN_process_warmup.start()
+	CNN_DQN_process_warmup.start()	
 
 
 
