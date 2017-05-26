@@ -196,7 +196,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances, imm_costs,
 			t_left =  ts % (T + 1)
 			curr_book = env.get_next_state()
 			# ideal price is mid-spread end of the period
-			perfect_price = env.mid_spread(ts*time_unit + time_unit * (T- t_left))
+			perfect_price = env.mid_spread(ts*time_unit + offset + time_unit * (T- t_left) + offset)
 
 			spread = compute_bid_ask_spread(curr_book, spreads)
 			volume_misbalance = compute_volume_misbalance(curr_book, misbalances, env)
