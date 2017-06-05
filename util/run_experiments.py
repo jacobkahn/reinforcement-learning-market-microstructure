@@ -69,7 +69,7 @@ if __name__ == "__main__":
 		'advantage': True,
 		'replay': True,
 		'replay_size': 2000,
-		'replays': 50,
+		'replays': 10,
 		'window': window,
 		'ob_size': ob_size,
 		'hidden_size': hidden_size, 
