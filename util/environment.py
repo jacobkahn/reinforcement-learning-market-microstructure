@@ -42,6 +42,7 @@ class Environment:
 		return ob
 
 	# generates the correct environment from timesteps start to end-1
+	# generates the metadata needed for market variable construction
 	def get_timesteps(self, start, end, I, V, window=10):
 		if start < 0:
 			print "Timesteps out of bounds!"
@@ -100,7 +101,6 @@ class Environment:
 				curr_book = OrderBook(ask_prices, ask_volumes, bid_prices, bid_volumes)
 				self.time_steps.append(ob)
 
-			# update stuff - still have to add volumes
 			s = self.spread(ask_prices, bid_prices)
 			v = self.volume(ob)
 			m = self.misbalance(curr_book)

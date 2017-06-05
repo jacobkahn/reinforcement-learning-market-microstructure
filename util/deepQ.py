@@ -368,7 +368,7 @@ def run_sampling_DQN(sess, envs, agent, params):
 				q_vals, loss, min_score = agent.update_networks(sess)
 				diffs.append(loss)
 				agent.choose_backup_networks()
-				losses.append([q_vals, loss, min_score, b_in, b_targ])
+				#losses.append([q_vals, loss, min_score, b_in, b_targ])
 				#print_stuff(agent, q_vals, loss, b_in, b_targ)
 				if len(diffs) == 100:
 					print np.mean(diffs)
@@ -424,7 +424,7 @@ def run_dp(sess, envs, agent, params):
 					q_vals, loss, min_score = agent.update_networks(sess)
 					agent.choose_backup_networks()
 					diffs.append(loss)
-					losses.append([q_vals, loss, min_score, b_in, b_targ])
+					#losses.append([q_vals, loss, min_score, b_in, b_targ])
 					# print_stuff(agent, q_vals, loss, b_in, b_targ)
 					if len(diffs) == 10:
 						print np.mean(diffs)
