@@ -49,8 +49,8 @@ if __name__ == "__main__":
 	H = 10000
 	T = 15
 	I = 15
-	w_S = 5000
-	S = 50000
+	w_S = 100
+	S = 10000
 	L = 5
 	window = 50
 	ob_size = L
@@ -116,8 +116,8 @@ if __name__ == "__main__":
 	samplingProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, samplingBackup, S, divs, test_steps), kwargs={'envs': envs, 'test_env':test_env})
 	#replayBufferProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, replayBufferBackup, S, divs, test_steps), kwargs={'env': environment})
 	# start
-	doubleQProcess.start()
-	samplingProcess.start()
+	#doubleQProcess.start()
+	#samplingProcess.start()
 	#replayBufferProcess.start()
 
 	# function approx
@@ -125,8 +125,8 @@ if __name__ == "__main__":
 	func_samplingProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, samplingBackup, S, divs, test_steps), kwargs={'envs': envs, 'test_env':test_env, 'func_approx': "linear"})
 	#func_replayBufferProcess = multiprocess.Process(target=dp_algo, args=(ob_file, H, V, I, T, L, replayBufferBackup, S, divs, test_steps), kwargs={'env': environment, 'func_approx': "linear"})
 	# start
-	func_doubleQProcess.start()
-	func_samplingProcess.start()
+	#func_doubleQProcess.start()
+	#func_samplingProcess.start()
 	#func_replayBufferProcess.start()
 
 	# deep learning
@@ -141,8 +141,8 @@ if __name__ == "__main__":
 	CNN_DQN_process_warmup = multiprocess.Process(target=train_DQN_DP_warmup, args=(epochs, ob_file, params, test_steps), kwargs={'envs': envs, 'test_env':test_env, 'test_file_name':'CNN_warmup-trades'})
 
 	# start
-	RNN_DQN_process_dp.start()
-	CNN_DQN_process_dp.start()
+	#RNN_DQN_process_dp.start()
+	#CNN_DQN_process_dp.start()
 	RNN_DQN_process_warmup.start()
 	CNN_DQN_process_warmup.start()	
 

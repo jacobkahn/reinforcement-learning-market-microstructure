@@ -427,6 +427,7 @@ def run_dp(sess, envs, agent, params):
 					#losses.append([q_vals, loss, min_score, b_in, b_targ])
 					# print_stuff(agent, q_vals, loss, b_in, b_targ)
 					if len(diffs) == 10:
+						print 'TS %d'%ts
 						print np.mean(diffs)
 						diffs = []
 	print 'Epoch Over'
