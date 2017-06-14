@@ -293,7 +293,7 @@ def execute_algo(agent, params, session, env, steps):
 				paid += overflow * actions[-2] + additional_spent
 				leftover = 0
 			if leftover == volume:
-				reward = [t_left, rounded_unit, spread, volume_misbalance, min_action, 'no trade ', 0]
+				reward = [t_left, rounded_unit, spread, volume_misbalance, signed_vol, min_action, 'no trade ', 0]
 			else:
 				price_paid = paid / (volume - leftover)
 				basis_p = (float(price_paid) - perfect_price)/perfect_price * 100
