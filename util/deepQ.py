@@ -222,11 +222,12 @@ def create_input_window_test(env, window, ob_size, t, i):
 
 def create_input_window_stateless(env, ts, window, ob_size, t, i):
 	if(ts < window - 1):
+		env.get_book(ts)
 		return np.zeros(shape=[1, window, ob_size * 4 + 2])
 	else:
 		vecs = []
 		for idx in range(ts - window + 1, ts + 1):
-			book_vec = env.get_book(ts).vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
+			book_vec = env.get_book(idx).vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
 			vecs.append(book_vec)
 		window_vec = np.concatenate(vecs, axis=1)
 		return window_vec
