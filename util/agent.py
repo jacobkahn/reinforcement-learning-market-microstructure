@@ -217,7 +217,7 @@ def execute_algo(table, env, H, V, I, T, steps, spreads, misbalances, imm_costs,
 				leftover = 0
 
 			if leftover == volume:
-				reward = [t_left, rounded_unit, spread, volume_misbalance, signed_vol, min_action, 'no trade ', 0]
+				reward = [t_left, rounded_unit, spread, volume_misbalance,  immediate_cost, signed_vol, min_action, 'no trade ', 0]
 			else:
 				price_paid = paid / (volume - leftover)
 				basis_p = (float(price_paid) - perfect_price)/perfect_price * 100
