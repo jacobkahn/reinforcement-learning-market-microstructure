@@ -227,6 +227,7 @@ def create_input_window_stateless(env, ts, window, ob_size, t, i):
 	else:
 		vecs = []
 		for idx in range(ts - window + 1, ts + 1):
+			print idx
 			book_vec = env.get_book(idx).vectorize_book(ob_size, t, i).reshape(1,1,ob_size * 4 + 2)
 			vecs.append(book_vec)
 		window_vec = np.concatenate(vecs, axis=1)
@@ -260,8 +261,8 @@ def execute_algo(agent, params, session, env, steps):
 	time_unit = H/T
 	# number of decisions possible during test steps set
 	decisions = steps / time_unit - 1
-	for x in range(10):
-		offset = random.randint(0, time_unit - 1)
+	for x in range(time_unit - 2):
+		offset = x
 		for ts in range(0, decisions+1):
 			# update the state of the algorithm based on the current book and timestep
 			rounded_unit = 1.0 * volume / vol_unit
