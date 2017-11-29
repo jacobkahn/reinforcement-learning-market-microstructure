@@ -32,40 +32,49 @@ class EpisodeBuilder:
 
 class Episode:
 	def __init__(self, start_vol, window_size, start_time, end_time, ep_library, num_decision_pts):
-		self.time_step = (end_time - start_time)/num_decision_pts
-		self.curr_time = start_time
+		self.num_decision_pts = num_decision_pts
+		self.start_time, self.curr_time = start_time
 		self.end_time = end_time
 		self.curr_decision_pt = 0
 		self.ep_library = ep_library
 		self.curr_vol = start_vol
 		self.init_state = State([book for book in ep_library if book.get_time <= start_time & book.get_time >= start_time - window_size], end_time - start_time, self.curr_vol)
 		self.curr_state = self.init_state
-		self.diffs = [self.ep_library[1]] #????
+		self.diffs = get_time_steps(ep_library)
 
-	def get_state():
+	def get_state(self):
 		return self.curr_state
 
-	def trade(act):
-		self.curr_time += self.time_step
-		self.curr_decision_pt += 1
+	def get_time_steps(ob_vec):
+		#what is signed volume?
+		time_steps = []
+		for book in ob_vec:
+			if len(time_steps) > 0:
+				ob = curr_book.diff(book.get_asks(), book.get_bids())
+				time_steps.append(ob)
+				curr_book.apply_diff(time_steps[-1])
+			else:
+				curr_book = book
+				time_steps.append(book)
+		return time_steps
 
+
+	def trade(self, act):
+		#should this return any cost info?
 		# apply the action
-		new_obs = [book for book in self.ep_library if book.get_time >= self.curr_time]
-		for book in new_obs:
-			book.apply_action(act, act.get_side())
-			book.clean_book
-			curr_book.apply_diff(self.time_steps[-1])
-		self.curr_vol -= act.get_volume
-
-		# find and apply diffs to books after current timestep
-		diffed_books = [book for book in self.ep_library if book.get_time > self.curr_time]
-		for i in range(len(diffed_books)):
-			#self.diffs.append(book.diff())
-			#book.apply_diff(self.diffs[i])
-		self.diffs[1:-1] = []
+		self.curr_vol = self.curr_state.limit_order(act)
+		if self.curr_time >= self.end_time:
+			self.curr_vol = 0
+		else:
+#time_steps contain diff info?
+			for book in self.ep_library if book.get_time() >= self.curr_time:
+				book.apply_diff([diff for diff in self.diffs if diff.get_time() == book.get_time()])
 
 		# update the state with the diffed books and new lookback window
-		self.curr_state = State([book for book in ep_library if book.get_time < self.curr_time & book.get_time >= self.curr_time - window_size, new_ob],
+		self.curr_vol -= act.get_volume
+		self.curr_time += (self.end_time - self.start_time)/self.num_decision_pts
+		self.curr_decision_pt += 1
+		self.curr_state = State([book for book in ep_library if book.get_time < self.curr_time & book.get_time >= self.curr_time - window_size],
 								self.end_time - self.curr_time, self.curr_vol)
 
 class State:
@@ -81,6 +90,41 @@ class State:
 		return self.time_remaining
 	def get_inventory(self):
 		return self.inventory_remaining
+	def get_last_price(self):
+		return self.look_backwindow[-1].get_price()
+
+	def limit_order(self, action):
+		curr_book = self.lookback_window[-1]
+		total = 0
+		price = action.get_price()
+		volume = action.get_volume()
+		if action.get_side() == "buy":
+			for level in sorted(curr_book.get_asks(), key = get_price):
+				if volume == 0:
+					return (total, volume)
+				else:
+					if level.get_price() <= price:
+						# returns number left after you clear orderbook at this price
+						left = curr_book.order(side, action)
+						total += (volume-left) * pr
+						volume = left
+					else:
+						return (total, volume)
+			return total, volume
+		if action.get_side() == "sell":
+			# should this be sorted in opp direction?
+			for level in sorted(curr_book.get_bids(), key = get_price)[::-1]: # not sure what the -1 is for
+				if volume == 0:
+					return (total, level.get_volume())
+				else:
+					if level.get_price() >= price:
+						# returns number left after you clear orderbook at this price
+						left = curr_book.order(side, action)
+						total += (volume-left) * pr
+						volume = left
+					else:
+						return (total, volume)
+				return total, volume
 
 class Library:
 
@@ -100,24 +144,26 @@ class Orderbook:
 	def get_time(self):
 		return self.time
 
-	def apply_action(self, side, act):
+	def order(self, side, act):
 		if side == "buy":
 			for level in self.asks:
 				if act.get_price() == level.get_price():
-					#ret = max(0, act.get_volume() - level.get_price())
+					ret = max(0, act.get_volume() - level.get_price())
 					level.set_price(max(level.get_price() - volume, 0))
-				#return
+				return ret
 			return -1
 		elif side == "sell":
 			for level in self.bids:
 				if act.get_price() == level.get_price():
-					#ret = max(0, act.get_volume - level.get_price())
+					ret = max(0, act.get_volume - level.get_price())
 					level.set_price(max(level.get_price() - volume, 0))
-				#return ret
+				return ret
 			return -1
 		else:
 			print "Invalid side code - OrderBook.order"
 			return -2
+
+
 
 	def clean_book(self):
 		for level in self.bids:
@@ -136,7 +182,6 @@ class Orderbook:
 			for level_this in self.get_asks():
 				if level_next.get_price() == level_this.get_price():
 					new_a.append(Level(level_next.get_price(), level_next.get_volume - level_this.get_volume)
-					#net_vol	+= level_next.get_volume - level_this.get_volume
 					missing = False
 			if missing:
 				new_a.append(level_next)
@@ -181,13 +226,13 @@ class Action:
 
 	def __init__(self, time, level, side):
 		self.time = time
-		self.level = level
+		self.volume = volume
 		if side in _sides
 			self.side = side
 		# prob not idiomatic
+
 	def get_side(self):
 		return self.side
-
 	def get_volume(self):
 		return self.volume
 
